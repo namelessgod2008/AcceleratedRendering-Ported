@@ -25,5 +25,5 @@ run-data
 
 repo
 
-# NeoForge compatibility shims
-src/main/java/net/
+# Decompiled MC reference classes
+/net/
