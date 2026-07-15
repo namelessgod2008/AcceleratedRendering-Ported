@@ -1,22 +1,19 @@
 package com.github.argon4w.acceleratedrendering.features.items.colors;
 
-import com.github.argon4w.acceleratedrendering.features.items.mixins.accessors.ItemColorsAccessor;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.color.item.ItemColor;
 import net.minecraft.world.item.ItemStack;
 
 public class ItemLayerColors implements ILayerColors {
 
-	private final ItemStack itemStack;
-	private final ItemColor itemColor;
+    private final ItemStack itemStack;
 
-	public ItemLayerColors(ItemStack itemStack) {
-		this.itemStack = itemStack;
-		this.itemColor = ColorHelper.getItemColorOrDefault(itemStack);
-	}
+    public ItemLayerColors(ItemStack itemStack) {
+        this.itemStack = itemStack;
+    }
 
-	@Override
-	public int getColor(int layer) {
-		return layer == -1 ? -1 : itemColor.getColor(itemStack, layer);
-	}
+    @Override
+    public int getColor(int layer) {
+        // TODO: ItemColors was removed in 1.21.4. Return pass-through (no tint) for now.
+        // Re-implement using TintSource / data components in a future update.
+        return -1;
+    }
 }

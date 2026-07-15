@@ -15,7 +15,7 @@ import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import lombok.experimental.ExtensionMethod;
 import net.minecraft.client.gui.font.glyphs.BakedGlyph;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.util.FastColor;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
@@ -57,11 +57,9 @@ public class BakedGlyphMixin implements IAcceleratedRenderer<BakedGlyph.Effect>,
 			float			positionY,
 			Matrix4f		pMatrix,
 			VertexConsumer	pBuffer,
-			float			pRed,
-			float			pGreen,
-			float			pBlue,
-			float			pAlpha,
 			int				pPackedLight,
+			boolean			pDropShadow,
+			int				pColor,
 			CallbackInfo	ci
 	) {
 		var extension = pBuffer.getAccelerated();
@@ -90,12 +88,7 @@ public class BakedGlyphMixin implements IAcceleratedRenderer<BakedGlyph.Effect>,
 					NORMAL,
 					pPackedLight,
 					OverlayTexture	.NO_OVERLAY,
-					FastColor.ARGB32.color(
-							(int) (pAlpha	* 255.0f),
-							(int) (pRed		* 255.0f),
-							(int) (pGreen	* 255.0f),
-							(int) (pBlue	* 255.0f)
-					)
+					pColor
 			);
 		}
 	}
@@ -129,12 +122,7 @@ public class BakedGlyphMixin implements IAcceleratedRenderer<BakedGlyph.Effect>,
 					NORMAL,
 					packedLight,
 					OverlayTexture	.NO_OVERLAY,
-					FastColor.ARGB32.color(
-							(int) (effect.a * 255.0f),
-							(int) (effect.r * 255.0f),
-							(int) (effect.g * 255.0f),
-							(int) (effect.b * 255.0f)
-					)
+				effect.color()
 			);
 		}
 	}

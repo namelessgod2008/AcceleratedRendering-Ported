@@ -85,16 +85,16 @@ public class GuiBatchingControllerMixin {
 			poseStack.pushPose	();
 			poseStack.setPose	(context.transform(), context.normal());
 
-			itemRenderer.render(
-					context.itemStack		(),
-					context.displayContext	(),
-					context.leftHand		(),
-					poseStack,
-					bufferSource,
-					context.combinedLight	(),
-					context.combinedOverlay	(),
-					context.bakedModel		()
-			);
+// TODO 1.21.4: 			itemRenderer.render(
+// TODO 1.21.4: 					context.itemStack		(),
+// TODO 1.21.4: 					context.displayContext	(),
+// TODO 1.21.4: 					context.leftHand		(),
+// TODO 1.21.4: 					poseStack,
+// TODO 1.21.4: 					bufferSource,
+// TODO 1.21.4: 					context.combinedLight	(),
+// TODO 1.21.4: 					context.combinedOverlay	(),
+// TODO 1.21.4: 					context.bakedModel		()
+// TODO 1.21.4: 			);
 
 			poseStack.popPose();
 		}
@@ -106,16 +106,16 @@ public class GuiBatchingControllerMixin {
 			poseStack.pushPose	();
 			poseStack.setPose	(context.transform(), context.normal());
 
-			itemRenderer.render(
-					context.itemStack		(),
-					context.displayContext	(),
-					context.leftHand		(),
-					poseStack,
-					bufferSource,
-					context.combinedLight	(),
-					context.combinedOverlay	(),
-					context.bakedModel		()
-			);
+// TODO 1.21.4: 			itemRenderer.render(
+// TODO 1.21.4: 					context.itemStack		(),
+// TODO 1.21.4: 					context.displayContext	(),
+// TODO 1.21.4: 					context.leftHand		(),
+// TODO 1.21.4: 					poseStack,
+// TODO 1.21.4: 					bufferSource,
+// TODO 1.21.4: 					context.combinedLight	(),
+// TODO 1.21.4: 					context.combinedOverlay	(),
+// TODO 1.21.4: 					context.bakedModel		()
+// TODO 1.21.4: 			);
 
 			poseStack.popPose();
 		}

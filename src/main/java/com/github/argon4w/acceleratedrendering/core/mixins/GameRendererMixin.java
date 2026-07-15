@@ -17,6 +17,7 @@ public class GameRendererMixin {
 
 	@Inject(
 			method = "renderItemInHand",
+			require = 0,
 			at = @At(
 					value	= "INVOKE",
 					target	= "Lnet/minecraft/client/renderer/ItemInHandRenderer;renderHandsWithItems(FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource$BufferSource;Lnet/minecraft/client/player/LocalPlayer;I)V",
@@ -33,6 +34,7 @@ public class GameRendererMixin {
 	}
 
 	@Inject(
+			require = 0,
 			method = "renderItemInHand",
 			at = @At(
 					value	= "INVOKE",
@@ -47,35 +49,5 @@ public class GameRendererMixin {
 			CallbackInfo	ci
 	) {
 		CoreFeature.resetRenderingHand();
-
-		if (!CoreFeature.isLoaded()) {
-			return;
-		}
-
-		CoreStates						.recordBuffers		();
-		CoreBuffers.ENTITY				.prepareBuffers		();
-		CoreBuffers.BLOCK				.prepareBuffers		();
-		CoreBuffers.POS					.prepareBuffers		();
-		CoreBuffers.POS_COLOR			.prepareBuffers		();
-		CoreBuffers.POS_TEX				.prepareBuffers		();
-		CoreBuffers.POS_TEX_COLOR		.prepareBuffers		();
-		CoreBuffers.POS_COLOR_TEX_LIGHT	.prepareBuffers		();
-		CoreStates						.restoreBuffers		();
-
-		CoreBuffers.ENTITY				.drawBuffers		(LayerDrawType.ALL);
-		CoreBuffers.BLOCK				.drawBuffers		(LayerDrawType.ALL);
-		CoreBuffers.POS					.drawBuffers		(LayerDrawType.ALL);
-		CoreBuffers.POS_COLOR			.drawBuffers		(LayerDrawType.ALL);
-		CoreBuffers.POS_TEX				.drawBuffers		(LayerDrawType.ALL);
-		CoreBuffers.POS_TEX_COLOR		.drawBuffers		(LayerDrawType.ALL);
-		CoreBuffers.POS_COLOR_TEX_LIGHT	.drawBuffers		(LayerDrawType.ALL);
-
-		CoreBuffers.ENTITY				.clearBuffers		();
-		CoreBuffers.BLOCK				.clearBuffers		();
-		CoreBuffers.POS					.clearBuffers		();
-		CoreBuffers.POS_COLOR			.clearBuffers		();
-		CoreBuffers.POS_TEX				.clearBuffers		();
-		CoreBuffers.POS_TEX_COLOR		.clearBuffers		();
-		CoreBuffers.POS_COLOR_TEX_LIGHT	.clearBuffers		();
 	}
 }

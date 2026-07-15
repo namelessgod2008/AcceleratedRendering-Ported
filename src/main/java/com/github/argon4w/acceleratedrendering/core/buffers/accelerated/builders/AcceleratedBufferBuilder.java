@@ -22,7 +22,7 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.util.FastColor;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryUtil;
@@ -294,7 +294,7 @@ public class AcceleratedBufferBuilder implements IAcceleratedVertexConsumer, Ver
 		posOffset	.putFloat	(vertexAddress + 0L,	pX);
 		posOffset	.putFloat	(vertexAddress + 4L,	pY);
 		posOffset	.putFloat	(vertexAddress + 8L,	pZ);
-		colorOffset	.putInt		(vertexAddress,			FastColor.ABGR32.fromArgb32(pColor));
+		colorOffset	.putInt		(vertexAddress,			FastColorCompat.ABGR32.fromArgb32(pColor));
 		uv0Offset	.putFloat	(vertexAddress + 0L,	pU);
 		uv0Offset	.putFloat	(vertexAddress + 4L,	pV);
 		uv1Offset	.putInt		(vertexAddress,			pPackedOverlay);
@@ -353,7 +353,7 @@ public class AcceleratedBufferBuilder implements IAcceleratedVertexConsumer, Ver
 				bufferSize
 		);
 
-		colorOffset	.putInt(vertexAddress, FastColor.ABGR32.fromArgb32(color));
+		colorOffset	.putInt(vertexAddress, FastColorCompat.ABGR32.fromArgb32(color));
 		uv1Offset	.putInt(vertexAddress, overlay);
 		uv2Offset	.putInt(vertexAddress, light);
 

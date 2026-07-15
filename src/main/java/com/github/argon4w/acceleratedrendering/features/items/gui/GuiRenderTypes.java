@@ -3,15 +3,17 @@ package com.github.argon4w.acceleratedrendering.features.items.gui;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.Util;
-import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
+
+import net.minecraft.util.TriState;
 
 import java.util.function.Function;
 
 public class GuiRenderTypes extends RenderType {
 
-	public static final ShaderStateShard POSITION_TEX_COLOR_SHADER = new ShaderStateShard(GameRenderer::getPositionTexColorShader);
+	public static final ShaderStateShard POSITION_TEX_COLOR_SHADER = POSITION_TEXTURE_COLOR_SHADER;
 
 	public static final Function<ResourceLocation, RenderType> BLIT = Util.memoize(atlasLocation -> create(
 				"acceleratedrendering:blit",
@@ -22,7 +24,7 @@ public class GuiRenderTypes extends RenderType {
 				false,
 				CompositeState
 						.builder()
-						.setTextureState		(new TextureStateShard(atlasLocation, false, false))
+						.setTextureState		(new TextureStateShard(atlasLocation, TriState.FALSE, false))
 						.setShaderState			(POSITION_TEX_COLOR_SHADER)
 						.setDepthTestState		(LEQUAL_DEPTH_TEST)
 						.setTransparencyState	(TRANSLUCENT_TRANSPARENCY)

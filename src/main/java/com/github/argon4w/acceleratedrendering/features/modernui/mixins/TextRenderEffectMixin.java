@@ -12,7 +12,7 @@ import icyllis.modernui.mc.text.TextRenderEffect;
 import lombok.experimental.ExtensionMethod;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.util.FastColor;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
@@ -61,7 +61,7 @@ public class TextRenderEffectMixin {
 					NORMAL,
 					LightTexture	.FULL_BRIGHT,
 					OverlayTexture	.NO_OVERLAY,
-					FastColor.ARGB32.color(
+					FastColorCompat.ARGB32.color(
 							alpha,
 							red,
 							green,
@@ -119,7 +119,7 @@ public class TextRenderEffectMixin {
 					NORMAL,
 					packedLight,
 					OverlayTexture.NO_OVERLAY,
-					FastColor.ARGB32.color(
+					FastColorCompat.ARGB32.color(
 							alpha,
 							red,
 							green,
@@ -177,7 +177,7 @@ public class TextRenderEffectMixin {
 					NORMAL,
 					LightTexture	.FULL_BRIGHT,
 					OverlayTexture	.NO_OVERLAY,
-					FastColor.ARGB32.color(
+					FastColorCompat.ARGB32.color(
 							alpha,
 							red,
 							green,
@@ -235,7 +235,7 @@ public class TextRenderEffectMixin {
 					NORMAL,
 					packedLight,
 					OverlayTexture.NO_OVERLAY,
-					FastColor.ARGB32.color(
+					FastColorCompat.ARGB32.color(
 							alpha,
 							red,
 							green,

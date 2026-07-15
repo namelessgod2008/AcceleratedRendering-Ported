@@ -2,9 +2,11 @@ package com.github.argon4w.acceleratedrendering.core.utils;
 
 public class FastColorUtils {
 
+	/**
+	 * In 1.21.4, BakedQuad vertex colors are already stored in ARGB format.
+	 * The old 1.21.1 R/B byte-swap is no longer needed.
+	 */
 	public static int convert(int color) {
-		return		color & 0xFF00FF00
-				| (	color & 0x00FF0000) >> 16
-				| (	color & 0x000000FF) << 16;
+		return color;
 	}
 }

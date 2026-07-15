@@ -2,7 +2,7 @@ package com.github.argon4w.acceleratedrendering.core.utils;
 
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
-import net.minecraft.util.FastColor;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 import net.minecraft.util.Mth;
 import org.joml.Vector2f;
 import org.joml.Vector2i;
@@ -44,7 +44,7 @@ public class Vertex {
 	}
 
 	public int getPackedColor() {
-		return FastColor.ARGB32.color(
+		return FastColorCompat.ARGB32.color(
 				color.w,
 				color.x,
 				color.y,

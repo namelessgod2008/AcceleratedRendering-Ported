@@ -21,13 +21,13 @@ import org.spongepowered.asm.mixin.injection.At;
 )
 public class ItemRendererMixin {
 
-	@WrapOperation(
-			method	= "render",
-			at		= @At(
-					value	= "INVOKE",
-					target	= "Lnet/minecraft/client/renderer/entity/ItemRenderer;renderModelLists(Lnet/minecraft/client/resources/model/BakedModel;Lnet/minecraft/world/item/ItemStack;IILcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;)V"
-			)
-	)
+// TODO 1.21.4: 	@WrapOperation(
+// TODO 1.21.4: 			method	= "render",
+// TODO 1.21.4: 			at		= @At(
+// TODO 1.21.4: 					value	= "INVOKE",
+// TODO 1.21.4: 					target	= "Lnet/minecraft/client/renderer/entity/ItemRenderer;renderModelLists(Lnet/minecraft/client/resources/model/BakedModel;Lnet/minecraft/world/item/ItemStack;IILcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;)V"
+// TODO 1.21.4: 			)
+// TODO 1.21.4: 	)
 	public void filterItem(
 			ItemRenderer	instance,
 			BakedModel		bakedModel,

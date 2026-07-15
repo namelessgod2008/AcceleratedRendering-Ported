@@ -74,8 +74,9 @@ public abstract class FontMixin {
 		);
 	}
 
-	@WrapMethod(method = "drawInBatch(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;IIZ)I")
-	public int renderGuiStringFast2(
+	// TODO 1.21.4: drawInBatch(String, ..., bidirectional) removed in 1.21.4
+	// @WrapMethod(method = "drawInBatch(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;IIZ)I")
+	public int renderGuiStringFast2_Disabled(
 			String				textString,
 			float				textX,
 			float				textY,

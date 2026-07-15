@@ -1,6 +1,6 @@
 package com.github.argon4w.acceleratedrendering.core.buffers.accelerated.pools.meshes;
 
-import net.minecraft.util.FastColor;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
@@ -77,7 +77,7 @@ public class FlattenMeshInfoCache implements IMeshInfoCache {
 
 	@Override
 	public int getColor(int i) {
-		return FastColor.ABGR32.fromArgb32((int) HANDLE.get(cache, i * MESH_INFO_SIZE + COLOR_OFFSET));
+		return FastColorCompat.ABGR32.fromArgb32((int) HANDLE.get(cache, i * MESH_INFO_SIZE + COLOR_OFFSET));
 	}
 
 	@Override

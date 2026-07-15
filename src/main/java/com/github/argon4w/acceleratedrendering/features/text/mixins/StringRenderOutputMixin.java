@@ -17,7 +17,7 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.network.chat.Style;
-import net.minecraft.util.FastColor;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.*;
@@ -212,14 +212,14 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 
 		if (textColor != null) {
 			this.color = textColor.getValue();
-			this.color = FastColor.ARGB32.color(
+			this.color = FastColorCompat.ARGB32.color(
 					(int) (a * 255.0f),
-					(int) (FastColor.ARGB32.red		(this.color) * dimFactor),
-					(int) (FastColor.ARGB32.green	(this.color) * dimFactor),
-					(int) (FastColor.ARGB32.blue	(this.color) * dimFactor)
+					(int) (FastColorCompat.ARGB32.red		(this.color) * dimFactor),
+					(int) (FastColorCompat.ARGB32.green	(this.color) * dimFactor),
+					(int) (FastColorCompat.ARGB32.blue	(this.color) * dimFactor)
 			);
 		} else {
-			this.color = FastColor.ARGB32.color(
+			this.color = FastColorCompat.ARGB32.color(
 					(int) (a * 255.0f),
 					(int) (r * 255.0f),
 					(int) (g * 255.0f),

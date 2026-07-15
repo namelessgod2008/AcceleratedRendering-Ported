@@ -162,11 +162,11 @@ public class AcceleratedSheetedDecalTextureGenerator extends AcceleratedVertexCo
 				cachedCamera
 		);
 
-		var direction	= Direction.getNearest(
-				normal.x(),
-				normal.y(),
-				normal.z()
-		);
+			var direction	= Direction.getNearest(
+					Math.round(normal.x()),
+					Math.round(normal.y()),
+					Math.round(normal.z()),
+					Direction.NORTH);
 
 		camera	.rotateY((float) 	Math.PI);
 		camera	.rotateX((float) (-	Math.PI / 2));

@@ -9,8 +9,7 @@ public class SimpleTextureTarget extends TextureTarget {
 		super(
 				Minecraft.getInstance().getWindow().getWidth	(),
 				Minecraft.getInstance().getWindow().getHeight	(),
-				useDepth,
-				Minecraft.ON_OSX
+				useDepth
 		);
 	}
 }

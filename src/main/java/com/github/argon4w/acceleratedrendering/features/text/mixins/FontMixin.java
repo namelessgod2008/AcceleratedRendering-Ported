@@ -166,6 +166,7 @@ public class FontMixin implements IAcceleratedFont {
 			Font.DisplayMode				displayMode,
 			int								background,
 			int								packedLight,
+				boolean							bidirectional,
 			CallbackInfoReturnable<Float>	cir,
 			@Local Font.StringRenderOutput	sink
 	) {
@@ -211,15 +212,11 @@ public class FontMixin implements IAcceleratedFont {
 									positionX + 1.0f + advance,
 									positionY - 1.0f,
 									0.01f,
-									(float) (background >> 16	& 0xFF) / 255.0f,
-									(float) (background >> 8	& 0xFF) / 255.0f,
-									(float) (background >> 0	& 0xFF) / 255.0f,
-									(float) (background >> 24	& 0xFF) / 255.0f
+								background
 							),
 							transform,
 							buffer.getBuffer(glyph.renderType(displayMode)),
-							packedLight
-					);
+							packedLight);
 				}
 			} else {
 				extension.beginMesh();
@@ -230,7 +227,7 @@ public class FontMixin implements IAcceleratedFont {
 						sink
 				);
 
-				advance = sink.finish(background, positionX);
+				advance = sink.finish(positionX);
 
 				meshes.put(scratchKey.bake(), extension.bake());
 			}
@@ -305,22 +302,18 @@ public class FontMixin implements IAcceleratedFont {
 									positionX + 1.0f + advance,
 									positionY - 1.0f,
 									0.01f,
-									(float) (background >> 16	& 0xFF) / 255.0f,
-									(float) (background >> 8	& 0xFF) / 255.0f,
-									(float) (background >> 0	& 0xFF) / 255.0f,
-									(float) (background >> 24	& 0xFF) / 255.0f
+								background
 							),
 							transform,
 							buffer.getBuffer(glyph.renderType(displayMode)),
-							packedLight
-					);
+							packedLight);
 				}
 			} else {
 				var extension = sink.getAccelerated();
 
 				extension		.beginMesh	();
 				formatted		.accept		(sink);
-				advance	= sink	.finish		(background, positionX);
+				advance	= sink.finish(positionX);
 
 				meshes.put(scratchKey.bake(), extension.bake());
 			}

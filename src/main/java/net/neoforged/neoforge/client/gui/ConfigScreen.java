@@ -53,7 +53,7 @@ import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 import net.minecraft.client.gui.screens.options.OptionsSubScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.resources.language.I18n;
-import net.minecraft.data.models.blockstates.PropertyDispatch.QuadFunction;
+import net.minecraft.client.data.models.blockstates.PropertyDispatch.QuadFunction;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -1315,6 +1315,15 @@ public final class ConfigScreen extends OptionsSubScreen {
             @Override
             protected void updateWidgetNarration(final NarrationElementOutput pNarrationElementOutput) {
                 // TODO I have no idea. Help?
+            }
+            @Override
+            protected double scrollRate() {
+                return 0.0;
+            }
+
+            @Override
+            protected int contentHeight() {
+                return height;
             }
         }
     }

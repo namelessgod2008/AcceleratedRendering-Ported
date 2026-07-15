@@ -18,7 +18,7 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.network.chat.Style;
-import net.minecraft.util.FastColor;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 
@@ -52,11 +52,11 @@ public class ComponentMesh {
 	) {
 		var dimFactor = shadow ? 0.25f : 1.0f;
 
-		var defaultColor = FastColor.ARGB32.color(
-						FastColor.ARGB32.alpha	(color),
-				(int) (	FastColor.ARGB32.red	(color) * dimFactor),
-				(int) (	FastColor.ARGB32.green	(color) * dimFactor),
-				(int) (	FastColor.ARGB32.blue	(color) * dimFactor)
+		var defaultColor = FastColorCompat.ARGB32.color(
+						FastColorCompat.ARGB32.alpha	(color),
+				(int) (	FastColorCompat.ARGB32.red	(color) * dimFactor),
+				(int) (	FastColorCompat.ARGB32.green	(color) * dimFactor),
+				(int) (	FastColorCompat.ARGB32.blue	(color) * dimFactor)
 		);
 
 		for (int index = 0, size = obfuscatedGlyphs.size(); index < size; index ++) {
@@ -131,11 +131,11 @@ public class ComponentMesh {
 					var textColor		= sequenceKey	.getColor			();
 
 					if (hasColor) {
-						color = FastColor.ARGB32.color(
-										FastColor.ARGB32.alpha	(color),
-								(int) (	FastColor.ARGB32.red	(textColor) * dimFactor),
-								(int) (	FastColor.ARGB32.green	(textColor) * dimFactor),
-								(int) (	FastColor.ARGB32.blue	(textColor) * dimFactor)
+						color = FastColorCompat.ARGB32.color(
+										FastColorCompat.ARGB32.alpha	(color),
+								(int) (	FastColorCompat.ARGB32.red	(textColor) * dimFactor),
+								(int) (	FastColorCompat.ARGB32.green	(textColor) * dimFactor),
+								(int) (	FastColorCompat.ARGB32.blue	(textColor) * dimFactor)
 						);
 					} else {
 						color = defaultColor;

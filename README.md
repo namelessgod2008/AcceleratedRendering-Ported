@@ -1,84 +1,119 @@
-# 加速渲染 ([EN version](#english))
+# AcceleratedRendering-reFabricated
 
-**这里是加速渲染的Fabric移植，若阁下想要查看适用于NeoForge的加速渲染，请前往[本家](https://github.com/Argon4W/AcceleratedRendering)**
+**Minecraft Fabric 1.21.4 移植版** — GPU 计算着色器实体渲染加速模组。
 
-加速渲染是一个客户端实体渲染优化MOD.
-目的是改善在渲染大量实体或拥有大量顶点的复杂MOD实体的情况下产生的渲染性能问题,
-与此同时尽可能与光影MOD和其他MOD及其自定义实体兼容.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-![Benchmark](images/benchmark.jpg)
+---
 
-## 🍝赞助
-加速渲染基本由我（Argon4W）一人完成, 花费了数千小时对其进行开发和测试, 才得以发布.
-来自广大玩家们的赞助将用于加速渲染后续的更快的开发, 创新和优化, 感谢所有支持者!
-如果你喜欢这个MOD, 并且想要支持加速渲染的开发, 请前往[爱发电](https://afdian.com/a/argon4w)为狐狸买一份意面
+## 📦 上游项目
 
-## ✨为什么需要这个MOD
+本模组是以下项目的 Fabric 移植：
 
-Minecraft拥有一个羸弱的, 继承使用OpenGL立即模式的老版本的渲染系统以用来渲染实体和方块实体.
-这个渲染系统会在**CPU**上**单线程**每帧变换和上传实体渲染所需要的顶点.
-这就导致有巨量的时间被浪费在这些单线程执行的操作上, 导致了在渲染大量顶点时CPU其他核心和GPU空闲, 而FPS却十分低的奇异景象.
+| 项目 | 作者 | 平台 | 版本 |
+|------|------|------|------|
+| [AcceleratedRendering](https://github.com/Argon4W/AcceleratedRendering) | **Argon4W** | NeoForge | 1.21.1 (原始) |
+| [AcceleratedRendering-reFabricated](https://github.com/ZhuRuoLing/AcceleratedRendering-reFabricated) | **ZhuRuoLing** | Fabric | 1.21.1 (Fabric 移植) |
+| [AcceleratedRendering (1.21.4-port)](https://github.com/Luna5ama/AcceleratedRendering) | **Luna5ama** | NeoForge | 1.21.4 (NeoForge 移植参考) |
 
-## ⚙️工作原理
+本版本基于 ZhuRuoLing 的 Fabric 1.21.1 移植，参照 Luna5ama 的 NeoForge 1.21.4 移植，更新至 **Minecraft 1.21.4 Fabric**。
 
-加速渲染构建了一个独特的渲染管线, 将变换前的顶点缓存至模型中, 并在需要渲染时将其提交到GPU使用计算着色器进行多线程并行变换.
-之后使用原本渲染系统中所使用的着色器进行渲染绘制. 通过这个渲染管线, 加速渲染可以在将实体渲染效率大幅提升,
-将CPU压力转移的同时维持对光影MOD的兼容性 (当前兼容Iris Shaders). 并且所有渲染特性都可以被关闭以保证兼容性.
+---
 
-## 🖥️硬件要求
+## 🚀 功能状态
 
-加速渲染因为使用了持久映射缓冲区(Persistently Mapped Buffer)和计算着色器, 因此需要OpenGL 4.6才能正常工作.
-理论上NVIDIA GT 400 Series, Intel HD Graphics 520/530及以上的显卡可以满足这个要求.
-加速渲染已经在发布前在NVIDIA GTX 1660Ti Max-Q, NVIDIA RTX 3070Ti Laptop, NVIDIA RTX 4090 Laptop, RX 580, RX 5600XT上经过测试.
-移动设备目前**不受支持**.
+### ✅ 已实现并正常工作
 
-## 🛠️配置
-配置文件可以在``<Minecraft安装位置>/.minecraft/config/acceleratedrendering-client.toml``找到. 你可以通过配置文件修改加速特性或在游戏内进行修改.
-部分特性可能需要重启游戏才能生效. 你可以在``模组 > Accelerated Rendering > 配置``找到游戏内配置编辑器.
-如要让加速物品渲染正常工作, 请在"核心配置" (Core Settings) 处开启"强制加速半透明" (Force Translucent Acceleration).
+| 功能 | 说明 |
+|------|------|
+| 实体模型加速 | `ModelPart` compile 加速，GPU 计算着色器并行变换 |
+| 实体阴影加速 | 加速方块阴影渲染 |
+| 物品加速 (世界) | 掉落物、手持物品加速渲染 |
+| 方块加速 | 方块模型渲染加速 (无着色) |
+| 文本加速 | `BakedGlyph`/`Font` 加速渲染 |
+| 核心管线 | 缓冲区管理、LevelRenderer 帧图钩子 |
 
-<a id="english"></a>
-# AcceleratedRendering
+### ⚠️ 部分兼容（功能降级）
 
-**This is the Fabric version of AcceleratedRendering, if you need the NeoForge supported version, please visit [here](https://github.com/Argon4W/AcceleratedRendering)**
+| 功能 | 问题 |
+|------|------|
+| 方块着色 | 草方块、树叶等无生物群系着色 (无色调) |
+| 物品着色 | 药水、刷怪蛋等无颜色着色 |
+| MultiPart 模型 | 栅栏、墙、火等不加速 |
+| Weighted 模型 | 加权变体不加速 |
+| 粒子兼容 | 粒子渲染时不暂停加速管线 |
+| 手部物品 | 手部物品使用 vanilla 渲染 (不加速) |
 
-This is a client side only entity rendering optimization MOD, aiming at improving performance when rendering large amount of entities
-or complex modded entities with significant amount of vertices with compute shaders on GPU while being compatible with shader packs,
-other MODs and their entities.
+### ❌ 未实现
 
-![Benchmark](images/benchmark.jpg)
+| 功能 | 原因 |
+|------|------|
+| GUI 批处理 | `GuiGraphics` API 变化 (bufferSource→private) |
+| 字符串渲染输出 | `StringRenderOutput` 内部字段重构 |
+| 物品栏实体渲染 | `InventoryScreen` 方法重写 |
+| Vanilla 渲染层修复 | Entity render state 重构 |
+| 方块实体过滤器 | `tryRender` 方法改名 |
+| MultiPart/Weighted 模型 | `@Shadow` 字段不匹配 |
+| Iris 兼容 | 未验证 (需 Iris 1.8.5+1.21.4) |
+| ImmediatelyFast 兼容 | 未验证 (需 IF 1.3.4+1.21.4) |
+| 其他 mod 兼容 | Create, EMF, Geckolib, TLM, FTB, Trinkets, Tweakmore, Sophisticated, ModernUI |
 
-## 🍝Sponsorship
+详细信息参见 [`TODO.md`](TODO.md)。
 
-This MOD is almost fully done by myself(Argon4W) and takes thousands of hours of my own time working and testing on it to be released.
-Sponsorships from players can ensure the future development, innovation and optimization of this MOD. Thanks for everyone
-that support this MOD! If you like it and want to support my work on the development of AcceleratedRendering, please consider sponsoring me at [爱发电](https://afdian.com/a/argon4w)
+---
 
-## ✨Why you need this MOD
+## 🔧 构建项目
 
-Minecraft has a poor immediate rendering system for rendering entities (including block entities) that is inherited from
-OpenGL immediate rendering mode that older versions of Minecraft uses. It transforms and uploads vertices on a **single render thread** on **CPU**
-every frame the entities are rendered, which results in huge amount of time being spent on these operations and left CPU and GPU idle with a very low FPS
-when rendering large amount of vertices.
+### 要求
 
-## ⚙️How it works
+- **JDK 21+** (推荐 JDK 21 或 24；JDK 25 不兼容 Fabric API)
+- **Gradle** (项目自带 wrapper，无需手动安装)
+- **Git**
 
-AcceleratedRendering constructs a unique rendering pipeline that caches the "original" vertices (vertices before the transform)
-into meshes and transforms them to be parallel in GPU using compute shaders. Then it draws the transformed vertices with the original shader.
-In this way, this MOD can make entity rendering much more efficient by shifting the transforming stress off from the CPU
-while still being compatible with shader packs (currently support Iris Shaders). All acceleration features can be disabled
-for better compatibility.
+### 映射
 
-## 🖥️Hardware Requirements
+| 组件 | 版本 |
+|------|------|
+| Minecraft | 1.21.4 |
+| 映射 | **Mojang Official Mappings** + Parchment |
+| Parchment | `parchment-1.21.4:2025.01.19@zip` |
+| Fabric Loader | 0.16.11 |
+| Fabric Loom | 1.16-SNAPSHOT |
 
-AcceleratedRendering requires OpenGL 4.6 to work properly for the usage of persistently mapped buffers and compute shaders.
-Graphics cards like NVIDIA GT 400 Series and Intel HD Graphics 520/530 or newer will fit this requirement.
-This MOD has been tested on NVIDIA GTX 1660Ti Max-Q, NVIDIA RTX 3070Ti Laptop, NVIDIA RTX 4090 Laptop, RX 580, RX 5600XT.
-Mobile devices currently are **not supported**.
+### 构建步骤
 
-## 🛠️Configuration
+```bash
+# 克隆仓库
+git clone https://github.com/ZhuRuoLing/AcceleratedRendering-reFabricated.git
+cd AcceleratedRendering-reFabricated
 
-Configuration file can be found in ``<your Minecraft>/.minecraft/config/acceleratedrendering-client.toml``. You can modify
-acceleration features in this file or in game (some specific configurations require a game restart to take effect).
-In-game configuration editor can be found in ``Mods > Accelerated Rendering > Config``.
-"Force Translucent Acceleration" in "Core Settings" is required to be enabled for accelerated item rendering to work properly.
+# 构建
+./gradlew build
+
+# 输出位置
+# build/libs/acceleratedrendering-<version>.jar
+```
+
+### 运行 (开发环境)
+
+```bash
+./gradlew runClient
+```
+
+---
+
+## 🤖 Vibe Coding 声明
+
+本项目的 **1.21.4 Fabric 移植** 由 AI 辅助 (Claude Code) 完成。
+
+- **人工监督**: 所有代码变更由人工审查和测试
+- **参照实现**: 移植过程中参照了 Luna5ama 的 NeoForge 1.21.4-port 和原版 Argon4W 项目
+- **易错点**: 参见 [`CLAUDE.md`](CLAUDE.md) 中的详细开发注意事项
+
+---
+
+## 📄 许可证
+
+MIT License — 参见 [LICENSE](LICENSE) 文件。
+
+原始模组版权 © Argon4W。

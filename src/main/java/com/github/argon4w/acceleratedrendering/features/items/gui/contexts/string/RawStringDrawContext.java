@@ -31,8 +31,7 @@ public record RawStringDrawContext(
 				bufferSource,
 				displayMode,
 				backgroundColor,
-				packedLight,
-				bidirectional
+				packedLight
 		);
 	}
 }

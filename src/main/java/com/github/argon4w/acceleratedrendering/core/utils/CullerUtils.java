@@ -1,7 +1,7 @@
 package com.github.argon4w.acceleratedrendering.core.utils;
 
 import com.mojang.blaze3d.platform.NativeImage;
-import net.minecraft.util.FastColor;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 import net.minecraft.util.Mth;
 import org.joml.Vector3f;
 
@@ -58,7 +58,7 @@ public class CullerUtils {
 				clampedX = clampedX < 0 ? width		+ clampedX : clampedX;
 				clampedY = clampedY < 0 ? height	+ clampedY : clampedY;
 
-				if (FastColor.ABGR32.alpha(texture.getPixelRGBA(clampedX, clampedY)) != 0) {
+				if (FastColorCompat.ABGR32.alpha(texture.getPixel(clampedX, clampedY)) != 0) {
 					return false;
 				}
 			}

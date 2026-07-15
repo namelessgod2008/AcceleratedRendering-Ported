@@ -7,7 +7,7 @@ import com.github.argon4w.acceleratedrendering.features.entities.AcceleratedEnti
 import com.github.argon4w.acceleratedrendering.features.mods.ModsFeature;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import lombok.experimental.ExtensionMethod;
+
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
@@ -17,7 +17,7 @@ import software.bernie.geckolib.cache.object.GeoBone;
 import software.bernie.geckolib.renderer.GeoRenderer;
 
 @Pseudo
-@ExtensionMethod(VertexConsumerExtension.class)
+
 @Mixin			(GeoRenderer			.class)
 public interface GeoRendererMixin {
 
@@ -40,7 +40,7 @@ public interface GeoRendererMixin {
 			int				colour,
 			CallbackInfo	ci
 	) {
-		var extension = buffer.getAccelerated();
+		var extension = VertexConsumerExtension.getAccelerated(buffer);
 
 		if (			CoreFeature							.isLoaded						()
 				&&		AcceleratedEntityRenderingFeature	.isEnabled						()

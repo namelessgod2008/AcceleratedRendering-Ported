@@ -13,9 +13,9 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import lombok.experimental.ExtensionMethod;
+
 import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.util.FastColor;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Unique;
@@ -24,7 +24,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Pseudo
-@ExtensionMethod(VertexConsumerExtension.class)
+
 @Mixin			(IGeoRenderer			.class)
 public interface IGeoRendererMixin {
 
@@ -45,7 +45,7 @@ public interface IGeoRendererMixin {
 			float			alpha,
 			CallbackInfo	ci
 	) {
-		var extension = buffer.getAccelerated();
+		var extension = VertexConsumerExtension.getAccelerated(buffer);
 
 		if (			CoreFeature							.isLoaded						()
 				&&		AcceleratedEntityRenderingFeature	.isEnabled						()
@@ -65,7 +65,7 @@ public interface IGeoRendererMixin {
 					extension,
 					packedLight,
 					packedOverlay,
-					FastColor.ARGB32.color(
+					FastColorCompat.ARGB32.color(
 							(int) (alpha	* 255.0f),
 							(int) (red		* 255.0f),
 							(int) (green	* 255.0f),
@@ -95,7 +95,7 @@ public interface IGeoRendererMixin {
 			float				alpha,
 			Operation<Boolean>	original
 	) {
-		var extension = buffer.getAccelerated();
+		var extension = VertexConsumerExtension.getAccelerated(buffer);
 
 		if (			CoreFeature							.isLoaded						()
 				&&		AcceleratedEntityRenderingFeature	.isEnabled						()
@@ -119,7 +119,7 @@ public interface IGeoRendererMixin {
 						last.normal	(),
 						cubePackedLight,
 						packedOverlay,
-						FastColor.ARGB32.color(
+						FastColorCompat.ARGB32.color(
 								(int) (alpha	* 255.0f),
 								(int) (red		* 255.0f),
 								(int) (green	* 255.0f),

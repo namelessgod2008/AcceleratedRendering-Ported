@@ -8,7 +8,7 @@ import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
 import lombok.Getter;
-import net.minecraft.util.FastColor;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 
 public class SimpleMeshCollector implements IMeshCollector {
 
@@ -176,7 +176,7 @@ public class SimpleMeshCollector implements IMeshCollector {
 		posOffset	.putFloat	(vertexAddress + 0L,	pX);
 		posOffset	.putFloat	(vertexAddress + 4L,	pY);
 		posOffset	.putFloat	(vertexAddress + 8L,	pZ);
-		colorOffset	.putInt		(vertexAddress,			FastColor.ABGR32.fromArgb32(pColor));
+		colorOffset	.putInt		(vertexAddress,			FastColorCompat.ABGR32.fromArgb32(pColor));
 		uv0Offset	.putFloat	(vertexAddress + 0L,	pU);
 		uv0Offset	.putFloat	(vertexAddress + 4L,	pV);
 		uv2Offset	.putInt		(vertexAddress,			pPackedLight);
@@ -190,10 +190,10 @@ public class SimpleMeshCollector implements IMeshCollector {
 				pZ,
 				pU,
 				pV,
-				FastColor.ARGB32.red	(pColor),
-				FastColor.ARGB32.green	(pColor),
-				FastColor.ARGB32.blue	(pColor),
-				FastColor.ARGB32.alpha	(pColor),
+				FastColorCompat.ARGB32.red	(pColor),
+				FastColorCompat.ARGB32.green	(pColor),
+				FastColorCompat.ARGB32.blue	(pColor),
+				FastColorCompat.ARGB32.alpha	(pColor),
 				PackedVector2i	.unpackU(pPackedLight),
 				PackedVector2i	.unpackV(pPackedLight),
 				pNormalX,

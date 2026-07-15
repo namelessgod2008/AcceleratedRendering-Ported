@@ -13,7 +13,7 @@ import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.ItemRenderer;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.FastColor;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Final;
@@ -193,7 +193,7 @@ public class GuiGraphicsMixin {
 		);
 	}
 
-	@WrapMethod(method = "innerBlit(Lnet/minecraft/resources/ResourceLocation;IIIIIFFFF)V")
+	@WrapMethod(method = "innerBlit", remap = false, require = 0)
 	public void renderBlitFast(
 			ResourceLocation atlasLocation,
 			int					minX,
@@ -245,7 +245,7 @@ public class GuiGraphicsMixin {
 		);
 	}
 
-	@WrapMethod(method = "innerBlit(Lnet/minecraft/resources/ResourceLocation;IIIIIFFFFFFFF)V")
+	@WrapMethod(method = "innerBlit", remap = false, require = 0)
 	public void renderBlitFast(
 			ResourceLocation	atlasLocation,
 			int					minX,
@@ -297,7 +297,7 @@ public class GuiGraphicsMixin {
 				minY,
 				maxY,
 				blitOffset,
-				FastColor.ARGB32.color(
+				FastColorCompat.ARGB32.color(
 						(int) (alpha	* 255.0f),
 						(int) (red		* 255.0f),
 						(int) (green	* 255.0f),

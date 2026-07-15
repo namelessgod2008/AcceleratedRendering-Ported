@@ -15,13 +15,14 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(BlockEntityRenderDispatcher.class)
 public class BlockEntityRenderDispatcherMixin {
 
-	@WrapOperation(
-			method	= "tryRender",
-			at		= @At(
-					value	= "INVOKE",
-					target	= "Ljava/lang/Runnable;run()V"
-			)
-	)
+	// TODO 1.21.4: tryRender was renamed or removed in 1.21.4
+	// @WrapOperation(
+	//			method	= "tryRender",
+	//			at		= @At(
+	//					value	= "INVOKE",
+	//					target	= "Ljava/lang/Runnable;run()V"
+	//			)
+	// )
 	private static void filterBlockEntity(
 			Runnable		instance,
 			Operation<Void>	original,

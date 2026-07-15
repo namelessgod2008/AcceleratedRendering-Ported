@@ -73,7 +73,7 @@ public class GuiBatchingController {
 	}
 
 	public void startBatching(GuiGraphics graphics) {
-		if (		graphics.bufferSource().getAcceleratable()	.isBufferSourceAcceleratable		()
+			if (true && graphics.bufferSource.getAcceleratable()	.isBufferSourceAcceleratable		()
 				&&	AcceleratedItemRenderingFeature				.isEnabled							()
 				&&	AcceleratedItemRenderingFeature				.shouldUseAcceleratedPipeline		()
 				&&	AcceleratedItemRenderingFeature				.shouldAccelerateInGui				()
@@ -88,9 +88,13 @@ public class GuiBatchingController {
 
 	@SuppressWarnings("UnstableApiUsage")
 	public float flushBatching(GuiGraphics graphics) {
+		// TODO 1.21.4: GuiBatchingController needs full refactor due to GuiGraphics.bufferSource becoming private
+		// and ItemRenderer.render() API changes. GUI item batching is temporarily disabled.
+		return 0.0f;
+		/*
 		if (CoreFeature.isGuiBatching()) {
 			var itemRenderer	= Minecraft.getInstance()	.getItemRenderer();
-			var bufferSource	= graphics					.bufferSource	();
+			var bufferSource	= graphics					.bufferSource;
 			var poseStack		= graphics					.pose			();
 			var offset			= 0.0f;
 
@@ -122,7 +126,7 @@ public class GuiBatchingController {
 			}
 
 			for (var context : blitDrawContexts) {
-				var extension = graphics.bufferSource().getBuffer(GuiRenderTypes.blit(context.atlasLocation())).getAccelerated();
+// TODO 1.21.4: 				var extension = graphics.bufferSource.getBuffer(GuiRenderTypes.blit(context.atlasLocation())).getAccelerated();
 
 				if (extension.isAccelerated()) {
 					extension.doRender(
@@ -138,7 +142,7 @@ public class GuiBatchingController {
 			}
 
 			for (var context : fillDrawContexts) {
-				var extension = graphics.bufferSource().getBuffer(context.renderType()).getAccelerated();
+// TODO 1.21.4: 				var extension = graphics.bufferSource.getBuffer(context.renderType()).getAccelerated();
 
 				if (extension.isAccelerated()) {
 					extension.doRender(
@@ -154,7 +158,7 @@ public class GuiBatchingController {
 			}
 
 			for (var context : gradientDrawContexts) {
-				var extension = graphics.bufferSource().getBuffer(context.renderType()).getAccelerated();
+// TODO 1.21.4: 				var extension = graphics.bufferSource.getBuffer(context.renderType()).getAccelerated();
 
 				if (extension.isAccelerated()) {
 					extension.doRender(
@@ -170,7 +174,7 @@ public class GuiBatchingController {
 			}
 
 			for (var context : stringDrawContexts) {
-				context.drawString(graphics.bufferSource());
+// TODO 1.21.4: 				context.drawString(graphics.bufferSource);
 			}
 
 			scissorFlush.record	(graphics);
@@ -246,12 +250,12 @@ public class GuiBatchingController {
 				poseStack.pushPose	();
 				poseStack.setPose	(context.transform(), context.normal());
 
-				AbstractContainerScreen.renderSlotHighlight(
-						graphics,
-						context.highlightX	(),
-						context.highlightY	(),
-						context.blitOffset	()
-				);
+// TODO 1.21.4: 				AbstractContainerScreen.renderSlotHighlight(
+// TODO 1.21.4: 						graphics,
+// TODO 1.21.4: 						context.highlightX	(),
+// TODO 1.21.4: 						context.highlightY	(),
+// TODO 1.21.4: 						context.blitOffset	()
+// TODO 1.21.4: 				);
 
 				graphics.pose().popPose();
 			}
@@ -270,7 +274,7 @@ public class GuiBatchingController {
 			return offset;
 		}
 
-		return 0.0f;
+		*/
 	}
 
 	public void flushBatching() {

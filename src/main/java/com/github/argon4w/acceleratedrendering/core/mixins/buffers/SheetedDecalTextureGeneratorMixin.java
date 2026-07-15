@@ -25,6 +25,18 @@ public class SheetedDecalTextureGeneratorMixin implements IAcceleratedVertexCons
 
 	@Unique
 	@Override
+	public void beginTransform(Matrix4f transform, Matrix3f normal) {
+		delegate.getAccelerated().beginTransform(transform, normal);
+	}
+
+	@Unique
+	@Override
+	public void endTransform() {
+		delegate.getAccelerated().endTransform();
+	}
+
+	@Unique
+	@Override
 	public boolean isAccelerated() {
 		return delegate
 				.getAccelerated()

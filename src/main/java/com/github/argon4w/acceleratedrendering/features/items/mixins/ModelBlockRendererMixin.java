@@ -12,7 +12,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import lombok.experimental.ExtensionMethod;
 import net.minecraft.client.renderer.block.ModelBlockRenderer;
 import net.minecraft.client.resources.model.BakedModel;
-import net.minecraft.util.FastColor;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.state.BlockState;
@@ -71,12 +71,7 @@ public class ModelBlockRendererMixin {
 					extension1,
 					packedLight,
 					packedOverlay,
-					FastColor.ARGB32.colorFromFloat(
-							1.0f,
-							Mth.clamp(red,		0.0f, 1.0f),
-							Mth.clamp(green,	0.0f, 1.0f),
-							Mth.clamp(blue,		0.0f, 1.0f)
-					)
+					-1
 			);
 			return;
 		}
@@ -99,13 +94,8 @@ public class ModelBlockRendererMixin {
 									direction,
 									randomSource
 							),
-							new FixedColors(FastColor.ARGB32.colorFromFloat(
-									1.0f,
-									Mth.clamp(red,		0.0f, 1.0f),
-									Mth.clamp(green,	0.0f, 1.0f),
-									Mth.clamp(blue,		0.0f, 1.0f)
-							))
-					),
+								new FixedColors(-1)
+							),
 					pose.pose	(),
 					pose.normal	(),
 					packedLight,

@@ -68,7 +68,7 @@ public abstract class BakedQuadMixin implements IAcceleratedBakedQuad {
 		var meshCollector	= CoreFeature	.createMeshCollector(extension);
 		var meshBuilder		= extension		.decorate			(meshCollector);
 
-		for (var i = 0; i < vertices.length / 8; i++) {
+		for (var i = 0; i < vertices.length / IQuadTransformer.STRIDE; i++) {
 			var vertexOffset	= i				* IQuadTransformer.STRIDE;
 			var posOffset		= vertexOffset	+ IQuadTransformer.POSITION;
 			var colorOffset		= vertexOffset	+ IQuadTransformer.COLOR;

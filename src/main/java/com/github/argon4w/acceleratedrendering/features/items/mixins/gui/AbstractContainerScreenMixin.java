@@ -148,7 +148,8 @@ public abstract class AbstractContainerScreenMixin {
 				);
 	}
 
-    @WrapMethod(method = "renderSlotHighlight")
+    // TODO 1.21.4: renderSlotHighlight was split, slot highlight batching disabled.
+//    @WrapMethod(method = "renderSlotHighlightBack")
     private static void startRenderHighlight(
         GuiGraphics guiGraphics, int x, int y, int blitOffset, Operation<Void> original
 	) {

@@ -1,16 +1,14 @@
 package com.github.argon4w.acceleratedrendering.features.modelparts.mixins;
 
 import com.github.argon4w.acceleratedrendering.core.CoreFeature;
-import com.github.argon4w.acceleratedrendering.core.buffers.accelerated.builders.IAcceleratedVertexConsumer;
 import com.github.argon4w.acceleratedrendering.core.buffers.accelerated.builders.IBufferGraph;
+import com.github.argon4w.acceleratedrendering.core.buffers.accelerated.builders.IAcceleratedVertexConsumer;
 import com.github.argon4w.acceleratedrendering.core.buffers.accelerated.builders.VertexConsumerExtension;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 import com.github.argon4w.acceleratedrendering.core.buffers.accelerated.renderers.IAcceleratedRenderer;
 import com.github.argon4w.acceleratedrendering.core.meshes.IMesh;
-import com.github.argon4w.acceleratedrendering.core.meshes.collectors.CulledMeshCollector;
-import com.github.argon4w.acceleratedrendering.core.meshes.collectors.SimpleMeshCollector;
 import com.github.argon4w.acceleratedrendering.core.meshes.data.MeshData;
 import com.github.argon4w.acceleratedrendering.features.entities.AcceleratedEntityRenderingFeature;
-import com.github.argon4w.acceleratedrendering.features.mods.ModsFeature;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
@@ -18,6 +16,7 @@ import lombok.experimental.ExtensionMethod;
 import net.minecraft.client.model.geom.ModelPart;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -29,222 +28,130 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.List;
 import java.util.Map;
 
-@ExtensionMethod	(VertexConsumerExtension.class)
-@Mixin				(ModelPart				.class)
+/**
+ * 1.21.4 ModelPartMixin — compile() uses doRender for wrapper delegation,
+ * render() follows the proven old 1.21.1 logic exactly.
+ */
+@ExtensionMethod(VertexConsumerExtension.class)
+@Mixin(ModelPart.class)
 public class ModelPartMixin implements IAcceleratedRenderer<Void> {
 
-	@Shadow @Final public	List<ModelPart.Cube>		cubes;
+    @Shadow @Final public List<ModelPart.Cube> cubes;
 
-	@Unique private final	Map<IBufferGraph,	IMesh>	meshes = new Object2ObjectOpenHashMap<>();
-	@Unique private final	Map<MeshData,		IMesh>	merges = new Object2ObjectOpenHashMap<>();
+    @Unique private final Map<IBufferGraph, IMesh> meshes = new Object2ObjectOpenHashMap<>();
+    @Unique private final Map<MeshData, IMesh> merges = new Object2ObjectOpenHashMap<>();
 
-	@Inject(
-			method		= "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V",
-			at			= @At("HEAD"),
-			cancellable	= true
-	)
-	public void renderFast(
-			PoseStack		poseStack,
-			VertexConsumer	buffer,
-			int				packedLight,
-			int				packedOverlay,
-			int				color,
-			CallbackInfo	ci
-	) {
-		var extension = buffer.getAccelerated();
+    @Inject(method = "compile", at = @At("HEAD"), cancellable = true)
+    public void compile(
+            PoseStack.Pose pPose,
+            VertexConsumer pBuffer,
+            int pPackedLight,
+            int pPackedOverlay,
+            int pColor,
+            CallbackInfo ci
+    ) {
+        var extension = pBuffer.getAccelerated();
 
-		if (			AcceleratedEntityRenderingFeature	.isEnabled						()
-				&&		AcceleratedEntityRenderingFeature	.shouldUseAcceleratedPipeline	()
-				&&		ModsFeature							.isEnabled						()
-				&&		ModsFeature							.shouldAccelerateVanilla		()
-				&&	(	CoreFeature							.isRenderingLevel				()
-				||	(	CoreFeature							.isRenderingGui					()
-				&&		AcceleratedEntityRenderingFeature	.shouldAccelerateInGui			()))
-				&&		extension							.isAccelerated					()
-		) {
-			ci.cancel();
+        // Only accelerate during world rendering — skip hand/GUI rendering
+        if (!CoreFeature.isRenderingLevel()) {
+            return;
+        }
+        if (CoreFeature.isRenderingHand()) {
+            return;
+        }
 
-			renderFast(
-					(ModelPart) (Object) this,
-					poseStack,
-					extension,
-					packedLight,
-					packedOverlay,
-					color
-			);
-		}
-	}
+        if (!AcceleratedEntityRenderingFeature.isEnabled()) {
+            return;
+        }
 
-	@Inject(
-			method		= "compile",
-			at			= @At("HEAD"),
-			cancellable	= true
-	)
-	public void compileFast(
-			PoseStack.Pose	pPose,
-			VertexConsumer	pBuffer,
-			int				pPackedLight,
-			int				pPackedOverlay,
-			int				pColor,
-			CallbackInfo	ci
-	) {
-		var extension = pBuffer.getAccelerated();
+        if (!AcceleratedEntityRenderingFeature.shouldUseAcceleratedPipeline()) {
+            return;
+        }
 
-		if (			CoreFeature							.isLoaded						()
-				&&		AcceleratedEntityRenderingFeature	.isEnabled						()
-				&&		AcceleratedEntityRenderingFeature	.shouldUseAcceleratedPipeline	()
-				&&		ModsFeature							.isEnabled						()
-				&&		ModsFeature							.shouldAccelerateVanilla		()
-				&&	(	CoreFeature							.isRenderingLevel				()
-				||	(	CoreFeature							.isRenderingGui					()
-				&&		AcceleratedEntityRenderingFeature	.shouldAccelerateInGui			()))
-				&&		extension							.isAccelerated					()
-		) {
-			ci			.cancel		();
-			extension	.doRender	(
-					this,
-					null,
-					pPose.pose	(),
-					pPose.normal(),
-					pPackedLight,
-					pPackedOverlay,
-					pColor
-			);
-		}
-	}
+        if (!extension.isAccelerated()) {
+            return;
+        }
 
-	@Unique
-	@Override
-	public void render(
-			VertexConsumer	vertexConsumer,
-			Void			context,
-			Matrix4f		transform,
-			Matrix3f		normal,
-			int				light,
-			int				overlay,
-			int				color
-	) {
-		var extension	= vertexConsumer.getAccelerated	();
-		var mesh		= meshes		.get			(extension);
+        ci.cancel();
+        extension.doRender(
+                this,
+                null,
+                pPose.pose(),
+                pPose.normal(),
+                pPackedLight,
+                pPackedOverlay,
+                pColor
+        );
+    }
 
-		extension.beginTransform(transform, normal);
+    @Unique
+    @Override
+    public void render(
+            VertexConsumer vertexConsumer,
+            Void context,
+            Matrix4f transform,
+            Matrix3f normal,
+            int light,
+            int overlay,
+            int color
+    ) {
+        var extension = vertexConsumer.getAccelerated();
 
-		if (mesh != null) {
-			mesh.write(
-					extension,
-					color,
-					light,
-					overlay
-			);
+        extension.beginTransform(transform, normal);
 
-			extension.endTransform();
-			return;
-		}
+        var mesh = meshes.get(extension);
 
-		var meshCollector	= CoreFeature	.createMeshCollector(extension);
-		var meshBuilder		= extension		.decorate			(meshCollector);
+        if (mesh != null) {
+            mesh.write(extension, color, light, overlay);
+            extension.endTransform();
+            return;
+        }
 
-		for (var cube : cubes) {
-			for (var polygon : cube.polygons) {
-				var polygonNormal = polygon.normal;
+        var meshCollector = CoreFeature.createMeshCollector(extension);
+        var meshBuilder  = extension.decorate(meshCollector);
 
-				for (var vertex : polygon.vertices) {
-					var vertexPosition = vertex.pos;
+        for (ModelPart.Cube cube : cubes) {
+            for (ModelPart.Polygon polygon : cube.polygons) {
+                Vector3f polygonNormal = polygon.normal;
 
-					meshBuilder.addVertex(
-							vertexPosition.x / 16.0f,
-							vertexPosition.y / 16.0f,
-							vertexPosition.z / 16.0f,
-							-1,
-							vertex.u,
-							vertex.v,
-							overlay,
-							0,
-							polygonNormal.x,
-							polygonNormal.y,
-							polygonNormal.z
-					);
-				}
-			}
-		}
+                for (ModelPart.Vertex vertex : polygon.vertices) {
+                    meshBuilder.addVertex(
+                            vertex.pos.x / 16.0f,
+                            vertex.pos.y / 16.0f,
+                            vertex.pos.z / 16.0f,
+                            -1,
+                            vertex.u,
+                            vertex.v,
+                            overlay,
+                            0,
+                            polygonNormal.x,
+                            polygonNormal.y,
+                            polygonNormal.z
+                    );
+                }
+            }
+        }
 
-		meshCollector.flush();
+        meshCollector.flush();
 
-		var data	= meshCollector	.getData	();
-		var buffer	= meshCollector	.getBuffer	();
-		mesh		= merges		.get		(data);
+        var data   = meshCollector.getData();
+        var buffer = meshCollector.getBuffer();
+        mesh = merges.get(data);
 
-		if (mesh != null) {
-			buffer.discard	();
-			buffer.close	();
-		} else {
-			mesh = AcceleratedEntityRenderingFeature
-					.getMeshType()
-					.getBuilder	()
-					.build		(meshCollector);
-		}
+        if (mesh != null) {
+            buffer.discard();
+            buffer.close();
+        } else {
+            mesh = AcceleratedEntityRenderingFeature
+                    .getMeshType()
+                    .getBuilder()
+                    .build(meshCollector);
+        }
 
-		meshes	.put	(extension, mesh);
-		merges	.put	(data,		mesh);
-		mesh	.write	(
-				extension,
-				color,
-				light,
-				overlay
-		);
+        meshes.put(extension, mesh);
+        merges.put(data, mesh);
 
-		extension.endTransform();
-	}
-
-	@Unique
-	@SuppressWarnings("unchecked")
-	private static void renderFast(
-			ModelPart					modelPart,
-			PoseStack					poseStack,
-			IAcceleratedVertexConsumer	extension,
-			int							packedLight,
-			int							packedOverlay,
-			int							packedColor
-	) {
-		if (!modelPart.visible) {
-			return;
-		}
-
-		if (		modelPart.cubes		.isEmpty()
-				&&	modelPart.children	.isEmpty()
-		) {
-			return;
-		}
-
-		poseStack.pushPose();
-
-		modelPart.translateAndRotate(poseStack);
-
-		if (!modelPart.skipDraw) {
-			var last = poseStack.last();
-
-			extension.doRender(
-					(IAcceleratedRenderer<Void>) (Object) modelPart,
-					null,
-					last.pose	(),
-					last.normal	(),
-					packedLight,
-					packedOverlay,
-					packedColor
-			);
-		}
-
-		for(var child : modelPart.children.values()) {
-			renderFast(
-					child,
-					poseStack,
-					extension,
-					packedLight,
-					packedOverlay,
-					packedColor
-			);
-		}
-
-		poseStack.popPose();
-	}
+        mesh.write(extension, color, light, overlay);
+        extension.endTransform();
+    }
 }

@@ -13,8 +13,7 @@
     "FormattedText$2Mixin",
     "FormattedText$3Mixin",
     "LineComponentMixin",
-    "MutableComponentMixin",
-    "StringRenderOutputMixin"
+    "MutableComponentMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -151,7 +151,7 @@ public abstract class SimpleBakedModelMixin implements IAcceleratedBakedModel, I
 				var meshBuilder = extension	.decorate	(meshCollector);
 				var data		= bakedQuad	.getVertices();
 
-				for (int i = 0; i < data.length / 8; i++) {
+				for (int i = 0; i < data.length / IQuadTransformer.STRIDE; i++) {
 					var vertexOffset	= i				* IQuadTransformer.STRIDE;
 					var posOffset		= vertexOffset	+ IQuadTransformer.POSITION;
 					var colorOffset		= vertexOffset	+ IQuadTransformer.COLOR;
@@ -165,9 +165,9 @@ public abstract class SimpleBakedModelMixin implements IAcceleratedBakedModel, I
                     float normalZ = ((byte) ((packedNormal >> 16) & 0xFF)) / 127.0f;
 
                     if (normalX == 0 && normalY == 0 && normalZ == 0) {
-                        normalX = bakedQuad.getDirection().getNormal().getX();
-                        normalY = bakedQuad.getDirection().getNormal().getY();
-                        normalZ = bakedQuad.getDirection().getNormal().getZ();
+                        normalX = bakedQuad.getDirection().getStepX();
+                        normalY = bakedQuad.getDirection().getStepY();
+                        normalZ = bakedQuad.getDirection().getStepZ();
                     }
 
 					meshBuilder.addVertex(

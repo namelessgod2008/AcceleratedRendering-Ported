@@ -29,7 +29,7 @@ public class RegistryFilter {
 						.matcher(key.toString())
 						.matches()
 				) {
-					filtered.add(registry.get(key));
+					registry.get(key).ifPresent(ref -> filtered.add(ref.value()));
 					break;
 				}
 			}

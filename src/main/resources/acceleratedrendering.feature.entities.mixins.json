@@ -4,8 +4,7 @@
   "package": "com.github.argon4w.acceleratedrendering.features.entities.mixins",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "EntityRenderDispatcherMixin",
-    "InventoryScreenMixin"
+    "EntityRenderDispatcherMixin"
   ],
   "injectors": {
     "defaultRequire": 1

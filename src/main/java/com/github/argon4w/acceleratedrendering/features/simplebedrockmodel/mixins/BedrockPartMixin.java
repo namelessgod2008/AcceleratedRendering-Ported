@@ -18,7 +18,7 @@ import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectList;
 import lombok.experimental.ExtensionMethod;
 import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.util.FastColor;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -85,7 +85,7 @@ public class BedrockPartMixin implements IAcceleratedRenderer<Void> {
 					extension,
 					lightmap,
 					overlay,
-					FastColor.ARGB32.color(
+					FastColorCompat.ARGB32.color(
 							(int) (alpha	* 255.0f),
 							(int) (red		* 255.0f),
 							(int) (green	* 255.0f),
@@ -131,7 +131,7 @@ public class BedrockPartMixin implements IAcceleratedRenderer<Void> {
 					pose.normal	(),
 					texU,
 					texV,
-					FastColor.ARGB32.color	(
+					FastColorCompat.ARGB32.color	(
 							(int) (alpha	* 255.0f),
 							(int) (red		* 255.0f),
 							(int) (green	* 255.0f),

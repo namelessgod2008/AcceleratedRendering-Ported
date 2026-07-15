@@ -1,18 +1,23 @@
 package com.github.argon4w.acceleratedrendering.core.buffers.memory;
 
 import com.github.argon4w.acceleratedrendering.core.utils.MemUtils;
-import lombok.AllArgsConstructor;
+
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryUtil;
 
 import java.util.function.LongSupplier;
 
-@AllArgsConstructor
+
 public class SimpleDynamicMemoryInterface implements IMemoryInterface {
 
 	private final long			offset;
 	private final LongSupplier	size;
+
+	public SimpleDynamicMemoryInterface(long offset, LongSupplier size) {
+		this.offset = offset;
+		this.size = size;
+	}
 
 	@Override
 	public void putByte(long address, byte value) {

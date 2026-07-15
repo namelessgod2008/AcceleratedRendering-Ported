@@ -11,7 +11,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import icyllis.modernui.mc.text.ModernTextRenderer;
 import icyllis.modernui.mc.text.TextLayout;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.util.FastColor;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 import net.minecraft.util.FormattedCharSequence;
 import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
@@ -78,7 +78,7 @@ public class ModernTextRendererMixin {
 				textX,
 				textTop,
 				uniformScale,
-				FastColor.ARGB32.color(
+				FastColorCompat.ARGB32.color(
 						alpha,
 						red,
 						green,

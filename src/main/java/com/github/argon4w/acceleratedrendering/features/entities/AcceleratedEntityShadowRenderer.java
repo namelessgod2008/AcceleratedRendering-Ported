@@ -6,7 +6,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import lombok.experimental.ExtensionMethod;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.core.BlockPos;
-import net.minecraft.util.FastColor;
+import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -72,7 +72,7 @@ public class AcceleratedEntityShadowRenderer implements IAcceleratedRenderer<Acc
 			shadowTransparency = 255.0f;
 		}
 
-		var shadowColor	= FastColor.ARGB32	.color	((int) shadowTransparency, color);
+		var shadowColor	= FastColorCompat.ABGR32	.fromArgb32(FastColorCompat.ARGB32.color((int) shadowTransparency, color));
 		var bounds		= voxelShape		.bounds	();
 
 		var minX = blockPos.getX() + (float) bounds.minX;

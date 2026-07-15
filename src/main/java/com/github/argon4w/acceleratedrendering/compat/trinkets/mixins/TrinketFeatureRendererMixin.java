@@ -79,7 +79,7 @@ public class TrinketFeatureRendererMixin {
         TrinketRenderer instance,
         ItemStack itemStack,
         SlotReference slotContext,
-        EntityModel<? extends LivingEntity> renderLayerParent,
+        EntityModel<?> renderLayerParent,
         PoseStack poseStack,
         MultiBufferSource bufferSource,
         int light,

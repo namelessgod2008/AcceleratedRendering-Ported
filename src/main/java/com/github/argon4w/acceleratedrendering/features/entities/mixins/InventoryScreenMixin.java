@@ -20,7 +20,7 @@ import org.spongepowered.asm.mixin.Mixin;
 @Mixin			(InventoryScreen		.class)
 public class InventoryScreenMixin {
 
-	@WrapMethod(method = "method_29977")
+	// @WrapMethod(method = "method_29977") -- TODO: removed in 1.21.4
 	private static void startRenderingGui(
         EntityRenderDispatcher	entityRenderDispatcher,
         LivingEntity			entity,
@@ -28,7 +28,7 @@ public class InventoryScreenMixin {
         Operation<Void> operation
 	) {
 		if (		!CoreFeature									.isLoaded						()
-				||	!guiGraphics.bufferSource().getAcceleratable()	.isBufferSourceAcceleratable	()
+// TODO 1.21.4: 				||	!guiGraphics.bufferSource().getAcceleratable()	.isBufferSourceAcceleratable	()
 				||	!AcceleratedEntityRenderingFeature				.isEnabled						()
 				||	!AcceleratedEntityRenderingFeature				.shouldUseAcceleratedPipeline	()
 				||	!AcceleratedEntityRenderingFeature				.shouldAccelerateInGui			()
