@@ -12,27 +12,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Gui.class)
 public class GuiMixin {
 
-	@Inject(
-			method	= "renderItemHotbar",
-			at		= @At("HEAD")
-	)
-	public void startBatching(
-			GuiGraphics		guiGraphics,
-			DeltaTracker	deltaTracker,
-			CallbackInfo	ci
-	) {
+	@Inject(method = "renderItemHotbar", at = @At("HEAD"))
+	public void startBatching(GuiGraphics guiGraphics, DeltaTracker deltaTracker, CallbackInfo ci) {
 		GuiBatchingController.INSTANCE.startBatching(guiGraphics);
 	}
 
-	@Inject(
-			method	= "renderItemHotbar",
-			at		= @At("TAIL")
-	)
-	public void flushBatching(
-			GuiGraphics		guiGraphics,
-			DeltaTracker	deltaTracker,
-			CallbackInfo	ci
-	) {
+	@Inject(method = "renderItemHotbar", at = @At("RETURN"))
+	public void flushBatching(GuiGraphics guiGraphics, DeltaTracker deltaTracker, CallbackInfo ci) {
 		GuiBatchingController.INSTANCE.flushBatching(guiGraphics);
 	}
 }

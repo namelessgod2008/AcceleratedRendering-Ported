@@ -1,116 +1,88 @@
 package com.github.argon4w.acceleratedrendering.features.items.mixins.models;
 
 import com.github.argon4w.acceleratedrendering.core.buffers.accelerated.builders.IAcceleratedVertexConsumer;
-import com.github.argon4w.acceleratedrendering.features.items.BakedModelExtension;
 import com.github.argon4w.acceleratedrendering.features.items.IAcceleratedBakedModel;
 import com.mojang.blaze3d.vertex.PoseStack;
-import lombok.Getter;
-import lombok.experimental.ExtensionMethod;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.client.resources.model.WeightedBakedModel;
 import net.minecraft.util.RandomSource;
-import net.minecraft.util.random.WeightedEntry;
-import net.minecraft.util.random.WeightedRandom;
+import net.minecraft.util.random.SimpleWeightedRandomList;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.util.List;
-
-@Getter
-@ExtensionMethod(BakedModelExtension.class)
-@Mixin			(WeightedBakedModel	.class)
+/**
+ * 1.21.4: WeightedBakedModel refactored — now extends DelegateBakedModel,
+ * list field type changed from List<WeightedEntry.Wrapper<BakedModel>> to SimpleWeightedRandomList<BakedModel>.
+ * getRandomValue(RandomSource) returns Optional<BakedModel> directly.
+ */
+@Mixin(WeightedBakedModel.class)
 public class WeightedBakedModelMixin implements IAcceleratedBakedModel {
 
-	@Unique private			boolean									accelerated;
-	@Unique private			boolean									acceleratedInHand;
-	@Unique private			boolean									acceleratedInGui;
+    @Shadow @Final private SimpleWeightedRandomList<BakedModel> list;
 
-	@Shadow @Final private	List<WeightedEntry.Wrapper<BakedModel>>	list;
-	@Shadow @Final private	int										totalWeight;
+    @Unique private Boolean acceleratedCache = null;
+    @Unique private Boolean acceleratedInHandCache = null;
+    @Unique private Boolean acceleratedInGuiCache = null;
 
-	@Inject(
-			method	= "<init>",
-			at		= @At("TAIL")
-	)
-	public void checkAccelerationSupport(List<WeightedEntry.Wrapper<BakedModel>> list, CallbackInfo ci) {
-		accelerated			= true;
-		acceleratedInHand	= true;
-		acceleratedInGui	= true;
+    @Unique
+    @Override
+    public boolean isAccelerated() {
+        if (acceleratedCache == null) acceleratedCache = checkAll(IAcceleratedBakedModel::isAccelerated);
+        return acceleratedCache;
+    }
 
-		for (WeightedEntry.Wrapper<BakedModel> wrapper : list) {
-			var extension = wrapper.data().getAccelerated();
+    @Unique
+    @Override
+    public boolean isAcceleratedInHand() {
+        if (acceleratedInHandCache == null) acceleratedInHandCache = checkAll(IAcceleratedBakedModel::isAcceleratedInHand);
+        return acceleratedInHandCache;
+    }
 
-			accelerated			&= extension.isAccelerated		();
-			acceleratedInHand	&= extension.isAcceleratedInHand();
-			acceleratedInGui	&= extension.isAcceleratedInGui	();
-		}
-	}
+    @Unique
+    @Override
+    public boolean isAcceleratedInGui() {
+        if (acceleratedInGuiCache == null) acceleratedInGuiCache = checkAll(IAcceleratedBakedModel::isAcceleratedInGui);
+        return acceleratedInGuiCache;
+    }
 
-	@Override
-	public void renderItemFast(
-			ItemStack					itemStack,
-			RandomSource				random,
-			PoseStack.Pose				pose,
-			IAcceleratedVertexConsumer	extension,
-			int							light,
-			int							overlay
-	) {
-		var model = WeightedRandom.getWeightedItem(list, Math.abs((int) random.nextLong()) % totalWeight);
+    @Unique
+    private boolean checkAll(java.util.function.Predicate<IAcceleratedBakedModel> check) {
+        if (list == null) return false;
+        for (var item : list.unwrap()) {
+            var model = item.data();
+            if (!(model instanceof IAcceleratedBakedModel acc) || !check.test(acc)) {
+                return false;
+            }
+        }
+        return true;
+    }
 
-		if (model.isPresent()) {
-			model
-					.get			()
-					.data			()
-					.getAccelerated	()
-					.renderItemFast	(
-							itemStack,
-							random,
-							pose,
-							extension,
-							light,
-							overlay
-					);
-		}
-	}
+    @Override
+    public void renderItemFast(ItemStack itemStack, RandomSource random, PoseStack.Pose pose,
+            IAcceleratedVertexConsumer extension, int light, int overlay) {
+        list.getRandomValue(random).ifPresent(model -> {
+            if (model instanceof IAcceleratedBakedModel acc) {
+                acc.renderItemFast(itemStack, random, pose, extension, light, overlay);
+            }
+        });
+    }
 
-	@Override
-	public void renderBlockFast(
-			BlockState					state,
-			RandomSource				random,
-			PoseStack.Pose				pose,
-			IAcceleratedVertexConsumer	extension,
-			int							light,
-			int							overlay,
-			int							color
-	) {
-		var model = WeightedRandom.getWeightedItem(list, Math.abs((int) random.nextLong()) % totalWeight);
+    @Override
+    public void renderBlockFast(BlockState state, RandomSource random, PoseStack.Pose pose,
+            IAcceleratedVertexConsumer extension, int light, int overlay, int color) {
+        list.getRandomValue(random).ifPresent(model -> {
+            if (model instanceof IAcceleratedBakedModel acc) {
+                acc.renderBlockFast(state, random, pose, extension, light, overlay, getCustomColor(-1, color));
+            }
+        });
+    }
 
-		if (model.isPresent()) {
-			model
-					.get			()
-					.data			()
-					.getAccelerated	()
-					.renderBlockFast(
-							state,
-							random,
-							pose,
-							extension,
-							light,
-							overlay,
-							getCustomColor(-1, color)
-					);
-		}
-	}
-
-	@Override
-	public int getCustomColor(int layer, int color) {
-		return color;
-	}
+    @Override
+    public int getCustomColor(int layer, int color) {
+        return color;
+    }
 }

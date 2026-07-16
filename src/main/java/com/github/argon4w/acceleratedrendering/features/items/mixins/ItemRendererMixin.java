@@ -7,6 +7,7 @@ import com.github.argon4w.acceleratedrendering.features.items.AcceleratedItemRen
 import com.github.argon4w.acceleratedrendering.features.items.AcceleratedQuadsRenderer;
 import com.github.argon4w.acceleratedrendering.features.items.BakedModelExtension;
 import com.github.argon4w.acceleratedrendering.features.items.colors.ItemLayerColors;
+import com.github.argon4w.acceleratedrendering.features.items.colors.TintLayerColors;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -28,8 +29,6 @@ public class ItemRendererMixin {
 
     @WrapOperation(
         method = "renderItem",
-        remap = false,
-        require = 0,
         at = @At(
             value = "INVOKE",
             remap = false,
@@ -60,22 +59,13 @@ public class ItemRendererMixin {
         var pose   = poseStack.last();
         var random = RandomSource.create(42L);
 
-        // Use the accelerated model if available
-        // Safe check — model must implement IAcceleratedBakedModel via mixin
-        if (!(bakedModel instanceof com.github.argon4w.acceleratedrendering.features.items.IAcceleratedBakedModel accelModel)) {
-            original.call(bakedModel, tintLayers, combinedLight, combinedOverlay, poseStack, buffer);
-            return;
-        }
-        if (accelModel.isAccelerated()) {
-            accelModel.renderItemFast(
-                null, // ItemStack not available from renderModelLists in 1.21.4
-                random,
-                pose,
-                extension,
-                combinedLight,
-                combinedOverlay
-            );
-            return;
+        // Use the accelerated model if available (skip if tint layers need applying)
+        if (tintLayers == null || tintLayers.length == 0) {
+            if (bakedModel instanceof com.github.argon4w.acceleratedrendering.features.items.IAcceleratedBakedModel accelModel
+                && accelModel.isAccelerated()) {
+                accelModel.renderItemFast(null, random, pose, extension, combinedLight, combinedOverlay);
+                return;
+            }
         }
 
         if (!AcceleratedItemRenderingFeature.shouldBakeMeshForQuad()) {
@@ -83,7 +73,7 @@ public class ItemRendererMixin {
             return;
         }
 
-        var color = new ItemLayerColors(null); // ItemStack not available
+        var color = new TintLayerColors(tintLayers);
 
         for (var direction : DirectionUtils.FULL) {
             random.setSeed(42L);

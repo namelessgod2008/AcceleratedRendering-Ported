@@ -57,9 +57,9 @@ public class BakedGlyphMixin implements IAcceleratedRenderer<BakedGlyph.Effect>,
 			float			positionY,
 			Matrix4f		pMatrix,
 			VertexConsumer	pBuffer,
-			int				pPackedLight,
-			boolean			pDropShadow,
 			int				pColor,
+			boolean			pBold,
+			int				pPackedLight,
 			CallbackInfo	ci
 	) {
 		var extension = pBuffer.getAccelerated();

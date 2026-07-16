@@ -1,5 +1,7 @@
 # AcceleratedRendering-reFabricated — Project Architecture & Migration Notes
 
+> ⚠️ **重要：在用户经过游戏测试并确认功能正常前，禁止修改 CLAUDE.md、memory/*.md 和 TODO.md。只允许修改源代码（src/）。**
+
 ## Project Overview
 - **Repository**: `ZhuRuoLing/AcceleratedRendering-reFabricated` (Fabric port)
 - **Upstream**: `Argon4W/AcceleratedRendering` (NeoForge, original), `Luna5ama/AcceleratedRendering` (NeoForge 1.21.4-port)
@@ -68,8 +70,31 @@ Each wrapper delegates `isAccelerated()`, `doRender()`, `beginTransform()`, `end
 ### 3. `compile()` must use `doRender()` pattern — NOT direct `beginTransform`
 In `ModelPartMixin.compile()`, call `extension.doRender(this, null, pPose.pose(), pPose.normal(), ...)` instead of `extension.beginTransform(...)`. The `doRender()` properly delegates through the wrapper chain, while `beginTransform()` on a wrapper throws UnsupportedOperationException.
 
-### 4. `GameRendererMixin` must NOT draw entity buffers
-Entity buffers must be drawn during world rendering (`method_62214`), NOT during hand rendering (`renderItemInHand`). Drawing in the wrong context applies wrong view-projection matrices → entities float/shift.
+### 4. `GameRendererMixin` only sets the hand flag — it does NOT draw buffers
+`GameRendererMixin` sets/clears `CoreFeature.isRenderingHand()` around `renderItemInHand`. This flag is checked by `ModelPartMixin` (and `ModelBlockRendererMixin`) to skip acceleration during hand rendering. Entity buffers are drawn exclusively by `LevelRendererMixin` inside `method_62214` (world rendering). Drawing entity buffers during hand rendering would apply the hand's view-projection matrices to world entities → entities float/shift.
+
+### 4b. Hand item acceleration — NOT working (coordinate space mismatch)
+Hand item acceleration is currently **disabled** — items render via vanilla. Investigation findings:
+- Full chain verified: `ItemInHandRenderer.renderItem()` → `ItemRenderer.renderStatic()` → `ItemStackRenderState.render()` → `LayerRenderState.render()` → `ItemRenderer.renderItem()` → `renderModelLists()`
+- `LayerRenderState.render()` pushPose → ItemTransform → translate(-0.5,-0.5,-0.5) → `renderItem()` → foil/compass scaling
+- At injection (`At.Shift.AFTER` on `renderHandsWithItems`): modelView still has `frustum`, projection is `handProjection`
+- Compute shader produces `inverse(frustum) * handTransforms * itemTransforms * modelVertex`
+- Vertex shader applies `handProjection * (viewMatrix * frustum) * vertexPos`
+- Theoretically `frustum * inverse(frustum)` cancels → `handProjection * viewMatrix * handTransforms * itemTransforms * modelVertex` — same as vanilla
+- **But stretching persists at runtime.** Static analysis cannot identify the cause — needs runtime matrix-value inspection.
+- Block entities in hand (BlockEntityRenderer path, not accelerated) and empty hand (ModelPart, not accelerated) render correctly.
+
+### 4c. GUI batching: `Lighting.setupForFlatItems()` must be paired with `Lighting.setupFor3DItems()`
+When GUI batching is active, `flushBatching(GuiGraphics)` calls `Lighting.setupForFlatItems()` for item rendering. The matching `Lighting.setupFor3DItems()` and `resetDefaultLayer` calls MUST execute after rendering — if they're inside a commented-out block (item rendering path disabled for 1.21.4), the OpenGL lighting state remains stuck in FLAT mode. This persists across frames → all entities/block entities render without 3D diffuse lighting → appear gray.
+- **Fix**: Move `Lighting.setupFor3DItems()`, `CoreFeature.resetDefaultLayer()`, `CoreFeature.resetDefaultLayerBeforeFunction()`, `CoreFeature.resetDefaultLayerAfterFunction()` outside any disabled code block.
+- Also: `flushBatching()` (no-param) must NOT `prepareBuffers`/`drawBuffers`/`clearBuffers` on `ENTITY`/`BLOCK` — only GUI-related buffers (`POS`, `POS_TEX_COLOR`, `POS_COLOR_TEX_LIGHT`, `POS_COLOR`, `POS_TEX`).
+
+### 4d. Modern UI compat: `@Pseudo` mixins use bytecode-dependent injection points
+Modern UI mixins (`feature.modernui.mixins.json`) target obfuscated class internals via `@Local(index)` and ordinal-based `@At`. These are fragile across Modern UI versions — variable names, ordinals, and method signatures change between releases. When fixing for a new Modern UI version:
+- Decompile the actual Modern UI jar with `javap -p -c -l` to get ordinals + local variable indices
+- Use `@Local(index = N)` not `@Local(name = "...")` — names are removed from debug info in some releases
+- Verify exact method signatures — Modern UI frequently adds/removes overloads and trailing parameters
+- Example: ModernUI 3.12.0 added `boolean` to `drawUnderline`/`drawStrikethrough`, removed `w`/`h` locals from `drawText`, swapped bg/glyph vertex ordinals
 
 ### 5. Rendering context checks are CRITICAL
 Every accelerated mixin must check the rendering context:
@@ -120,7 +145,22 @@ This project uses Mojang official mappings. Use `remap = false` on `@Inject`/`@W
 ### 14. `require = 0` for graceful degradation
 Use `require = 0` on ALL injections that target methods whose existence is uncertain (new 1.21.4 APIs, frame graph methods). This prevents crashes when the target doesn't exist — the injection silently skips.
 
-### 15. Tab-formatted files
+### 15. `ModelPartMixin` — color from MC is already GPU format
+`ModelPart.compile()` receives `pColor` already in ABGR format from the entity renderer. Do NOT convert it via `fromArgb32()`. Only colors WE compute (shadows, block tints) need conversion.
+
+### 16. `ItemRendererMixin` — use `tintLayers` array for item tinting
+In 1.21.4, `renderModelLists` signature changed from `(BakedModel, ItemStack, ...)` to `(BakedModel, int[] tintLayers, ...)`. The `int[] tintLayers` is pre-computed by `TintSource`. Created `TintLayerColors` record to wrap this array and pass tints through the acceleration pipeline.
+
+### 17. `MultipartBakedModelMixin` — avoid constructor injection
+In 1.21.4, never use `@Inject(method = "<init>")` on model mixins — it can break model baking. Use lazy `isAccelerated()` evaluation with `instanceof` checks.
+
+### 18. `WeightedBakedModelMixin` — refactored in 1.21.4
+- Field `list` type changed: `List<WeightedEntry.Wrapper<BakedModel>>` → `SimpleWeightedRandomList<BakedModel>`
+- Field `totalWeight` removed
+- Use `list.getRandomValue(random)` instead of `WeightedRandom.getWeightedItem(list, seed)`
+- Use `list.unwrap()` to iterate entries in `checkAll()`
+
+### 18. Tab-formatted files
 Many `.java` files use TAB indentation. **Avoid `sed` with `\n` or `\t` in replacement text** on Windows — it inserts literal characters instead of escape sequences. Use the Edit tool for precise replacements.
 
 ---
@@ -138,18 +178,18 @@ Many `.java` files use TAB indentation. **Avoid `sed` with `\n` or `\t` in repla
 | `TextureTarget` constructor | Removed 4th param `Minecraft.ON_OSX` | Remove 4th arg |
 | `PropertyDispatch.QuadFunction` | Moved to `net.minecraft.client.data.models.blockstates` | Update import |
 | `ArmorMaterial`/`ArmorTrim` | Moved to `net.minecraft.world.item.equipment` | Update imports |
-| `BakedGlyph.render()` | 11 params → 9 params, r/g/b/a → packed color, shadowOffset → boolean | Update method signature |
+| `BakedGlyph.render()` | Now private `(boolean,float,float,Matrix4f,VertexConsumer,int,boolean,int)` = `(italic,x,y,matrix,buffer,color,bold,packedLight)`; was 11-param public | Update param semantics: color NOT packedLight, bold NOT dropShadow |
 | `BakedGlyph.Effect` | Now record: `(float,float,float,float,float,int)` | Use `effect.color()` |
 | `Font.drawInBatch(String,...)` | Removed `bidirectional` param | Remove parameter |
 | `Font.StringRenderOutput` | `dropShadow`, `dimFactor`, `r`, `g`, `b`, `a` fields removed | Removed from mixins JSON |
 | `StringRenderOutput.finish(int,float)` | → `finish(float)` | Remove `background` parameter |
 | `LevelRenderer.renderLevel()` | Frame graph refactor, `method_62214` for endBatch/endOutlineBatch | Split into HEAD/RETURN + INVOKE injections |
 | `ModelPart$Polygon`/`Vertex` | Now records with methods | Added access widener for `pos`, `u`, `v`, `normal`, `vertices` |
-| `ParticleEngine.render()` | `(LightTexture,Camera,float)` → `(Camera,float,BufferSource)` | Removed from mixins JSON |
-| `ItemRenderer.render()` | Removed — replaced by `renderItem()` + frame graph | `remap=false` target on private `renderModelLists()` |
+| `ParticleEngine.render()` | `(LightTexture,Camera,float)` → `(Camera,float,BufferSource)` | Removed: pausing acceleration during particles degrades performance |
+| `ItemRenderer.render()` | Removed — replaced by `renderItem()` + frame graph | `remap=false` only on private `renderModelLists()`; `renderItem` uses default `remap=true` |
 | `GuiGraphics.innerBlit()` | First param changed to `Function<ResourceLocation,RenderType>` | Disabled |
-| `WeightedBakedModel.list` | Field renamed | Disabled |
-| `MultipartBakedModel` | `@Shadow` fields changed | Disabled |
+| `WeightedBakedModel.list` | → `SimpleWeightedRandomList<BakedModel>` | Fixed: `unwrap()` + `getRandomValue()` |
+| `MultipartBakedModel` | `@Shadow` fields changed; constructor injection breaks baking | Fixed: lazy Boolean cache + `instanceof` checks |
 
 ---
 
@@ -157,30 +197,50 @@ Many `.java` files use TAB indentation. **Avoid `sed` with `\n` or `\t` in repla
 
 | Feature | Status | Reason / TODO |
 |---------|--------|---------------|
-| **Item/block acceleration** | ✅ Working | `ItemRendererMixin` + `ModelBlockRendererMixin` + `SimpleBakedModelMixin` with color/stride fixes |
+| **Item/block acceleration** | ✅ Working | `ItemRendererMixin` (public `renderItem` remap=true, private `renderModelLists` remap=false, no require=0) + `ModelBlockRendererMixin` + `SimpleBakedModelMixin` with color/stride fixes |
 | **Entity model acceleration** | ✅ Working | `ModelPartMixin.compile()` with `isRenderingLevel()` check |
 | **Entity shadows** | ✅ Working | Color conversion fix |
-| **Text acceleration** | ✅ Working | BakedGlyph/Font signatures updated |
-| **Multipart Baked Model** | ❌ Disabled | `@Shadow` fields changed in 1.21.4 |
-| **Weighted Baked Model** | ❌ Disabled | `@Shadow` field `list` renamed |
-| **StringRenderOutput** | ❌ Disabled | Internal fields completely refactored |
-| **GUI batching** | ❌ Disabled | `GuiGraphics.bufferSource` became private |
-| **Item tinting (color)** | ⚠️ No tint | `ItemLayerColors` returns -1; `ModelBlockRendererMixin` uses -1 |
-| **Block entity filter** | ❌ Disabled | `tryRender` method renamed |
-| **LivingEntityRenderer/HumanoidArmorLayer** | ❌ Disabled | Entity render state refactor |
-| **Iris/ImmediatelyFast/ModernUI compat** | ⚠️ @Pseudo | Skip silently if mods not installed |
+| **Text acceleration** | ✅ Working | BakedGlyph render param semantics fixed (color/bold/packedLight); FontMixin renderText descriptors fixed (+Z bidirectional); drawInBatch8xOutline require=0 by design |
+| **Multipart Baked Model** | ✅ Working | Lazy Boolean cache + instanceof checks; no constructor injection |
+| **Weighted Baked Model** | ✅ Working | `SimpleWeightedRandomList<BakedModel>` + `unwrap()` + `getRandomValue()` |
+| **Item tinting (color)** | ✅ Working | `TintLayerColors(tintLayers)` from 1.21.4 TintSource; accelerated model path skips when tint layers present |
+| **StringRenderOutput** | ✅ Working | Updated to 1.21.4: `r/g/b/a`→packed `color`, `dropShadow`→`drawShadow`, `dimFactor` removed, `finish(float)` no backgroundColor |
+| **GUI batching** (fill/blit/slot) | ✅ Working | `flushBatching()` excludes ENTITY/BLOCK; `innerBlit` updated; `Lighting` restored; `GuiMixin` scoped to `renderItemHotbar`; `AbstractContainerScreenMixin` + `InventoryScreenMixin` enabled |
+| **GUI item batching** | ✅ Working | `ItemStackRenderState.render()` + `ItemModelResolver.updateForTopItem()` replaces removed `ItemRenderer.render()` |
+| **GUI font/string batching** | ✅ Working | `context.drawString()` via `font.drawInBatch()` 10-param; `gui.FontMixin` active |
+| **GUI slot highlight batching** | ✅ Working | `@WrapOperation` on `blitSprite` INVOKE; `sprites.getSprite()` → `submitBlit()` with `renderTypeGetter` param; AW: `GuiGraphics.sprites` + `GuiSpriteManager.getSprite` |
+| **Block entity filter** | ✅ Working | Updated to 1.21.4 `render(E, float, PoseStack, MultiBufferSource)`; `tryRender` removed |
+| **Entity filter** | ✅ Working | Updated to target `renderEntities` (private); `renderEntity` still exists with same signature |
+| **Inventory entity rendering** | ✅ Working | `method_64045` replaces removed `method_29977` |
+| **LivingEntityRenderer/HumanoidArmorLayer** | ✅ Working | Updated to 1.21.4 entity render state API; EquipmentLayerRenderer replaces renderTrim |
+| **Iris compat** | ✅ Working | `vanilla.LevelRendererMixin` updated to `method_62214` (14-param); injection points verified against bytecode |
+| **ImmediatelyFast compat** | ⚠️ @Pseudo | Not yet verified for 1.21.4 |
+| **ModernUI compat** | ✅ Working | Updated for ModernUI 3.12.0: `drawText` ordinals + `@Local(index)`, `drawUnderline`/`drawStrikethrough` signature + boolean param |
 
 ---
 
 ## Mixin Method Reference
 
 ### ItemRendererMixin (1.21.4)
-Targets `ItemRenderer.renderItem()` (Mojang, remap=false) wrapping call to `renderModelLists()`:
-- `renderItem` is a private static method in 1.21.4
-- `renderModelLists` is now private static with `(BakedModel, int[], int, int, PoseStack, VertexConsumer)` params
+Targets `ItemRenderer.renderItem()` wrapping call to `renderModelLists()`:
+- `renderItem` is `public static` in 1.21.4 — uses default `remap=true` (public methods get intermediary-mapped)
+- `renderModelLists` is `private static` — uses `remap=false` (private methods keep Mojang names)
+- Sig: `renderModelLists(BakedModel, int[], int, int, PoseStack, VertexConsumer)`
 - Handler: `(BakedModel, int[], int, int, PoseStack, VertexConsumer, Operation<Void>)` — NO ItemRenderer instance
 - Uses `instanceof IAcceleratedBakedModel` check before casting
 - Only accelerates when `CoreFeature.isRenderingLevel()` is true
+- No `require=0` — this is a core feature, failures must be loud
+
+### BakedGlyphMixin (1.21.4)
+- `render(boolean, float, float, Matrix4f, VertexConsumer, int, boolean, int)` = `(italic, x, y, matrix, buffer, color, bold, packedLight)`
+- Parameters 6-8 are `(int color, boolean bold, int packedLight)` — NOT `(int packedLight, boolean dropShadow, int color)`
+- Private method → no explicit `remap` needed (intermediary doesn't map private methods)
+
+### FontMixin (1.21.4)
+- `renderText` is private with 11 params in 1.21.4: includes final `boolean bidirectional`
+- Method descriptor MUST include trailing `Z` before `)F`: `(...IIZ)F`
+- Handler must accept all 11 params including `boolean bidirectional`
+- `drawInBatch8xOutline`: 3 coordinated injections with `@Share`, `@Local(index)`, ordinal+shift — all `require=0` by design (bytecode-layout dependent)
 
 ### ModelBlockRendererMixin
 Targets `ModelBlockRenderer.renderModel()` at HEAD. Uses `-1` for color (no tint).

@@ -20,7 +20,8 @@ public record BlitDrawContext(
 		float				minU,
 		float				maxU,
 		float				minV,
-		float				maxV
+		float				maxV,
+		java.util.function.Function<ResourceLocation, net.minecraft.client.renderer.RenderType> renderTypeGetter
 ) implements IGuiElementContext {
 
 	@Override

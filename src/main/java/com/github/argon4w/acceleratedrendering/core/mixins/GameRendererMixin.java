@@ -16,37 +16,37 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class GameRendererMixin {
 
 	@Inject(
-			method = "renderItemInHand",
-			require = 0,
-			at = @At(
-					value	= "INVOKE",
-					target	= "Lnet/minecraft/client/renderer/ItemInHandRenderer;renderHandsWithItems(FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource$BufferSource;Lnet/minecraft/client/player/LocalPlayer;I)V",
-					shift	= At.Shift.BEFORE
-			)
+		method = "renderItemInHand",
+		require = 0,
+		at = @At(
+			value	= "INVOKE",
+			target	= "Lnet/minecraft/client/renderer/ItemInHandRenderer;renderHandsWithItems(FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource$BufferSource;Lnet/minecraft/client/player/LocalPlayer;I)V",
+			shift	= At.Shift.BEFORE
+		)
 	)
 	public void startRenderItemInHandsFast(
-			Camera			camera,
-			float			partialTick,
-			Matrix4f		projectionMatrix,
-			CallbackInfo	ci
+		Camera			camera,
+		float			partialTick,
+		Matrix4f		projectionMatrix,
+		CallbackInfo	ci
 	) {
 		CoreFeature.setRenderingHand();
 	}
 
 	@Inject(
-			require = 0,
-			method = "renderItemInHand",
-			at = @At(
-					value	= "INVOKE",
-					target	= "Lnet/minecraft/client/renderer/ItemInHandRenderer;renderHandsWithItems(FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource$BufferSource;Lnet/minecraft/client/player/LocalPlayer;I)V",
-					shift	= At.Shift.AFTER
-			)
+		require = 0,
+		method = "renderItemInHand",
+		at = @At(
+			value	= "INVOKE",
+			target	= "Lnet/minecraft/client/renderer/ItemInHandRenderer;renderHandsWithItems(FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource$BufferSource;Lnet/minecraft/client/player/LocalPlayer;I)V",
+			shift	= At.Shift.AFTER
+		)
 	)
 	public void stopRenderItemInHandsFast(
-			Camera			camera,
-			float			partialTick,
-			Matrix4f		projectionMatrix,
-			CallbackInfo	ci
+		Camera			camera,
+		float			partialTick,
+		Matrix4f		projectionMatrix,
+		CallbackInfo	ci
 	) {
 		CoreFeature.resetRenderingHand();
 	}

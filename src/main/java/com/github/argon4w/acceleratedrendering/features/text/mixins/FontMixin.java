@@ -146,7 +146,7 @@ public class FontMixin implements IAcceleratedFont {
 	}
 
 	@Inject(
-			method		= "renderText(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)F",
+			method		= "renderText(Ljava/lang/String;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;IIZ)F",
 			at			= @At(
 					value	= "INVOKE",
 					target	= "Lnet/minecraft/util/StringDecomposer;iterateFormatted(Ljava/lang/String;Lnet/minecraft/network/chat/Style;Lnet/minecraft/util/FormattedCharSink;)Z",
@@ -237,7 +237,7 @@ public class FontMixin implements IAcceleratedFont {
 	}
 
 	@Inject(
-			method		= "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)F",
+			method		= "renderText(Lnet/minecraft/util/FormattedCharSequence;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;IIZ)F",
 			at			= @At(
 					value	= "INVOKE",
 					target	= "Lnet/minecraft/util/FormattedCharSequence;accept(Lnet/minecraft/util/FormattedCharSink;)Z",
@@ -257,6 +257,7 @@ public class FontMixin implements IAcceleratedFont {
 			Font.DisplayMode				displayMode,
 			int								background,
 			int								packedLight,
+			boolean							bidirectional,
 			CallbackInfoReturnable<Float>	cir,
 			@Local Font.StringRenderOutput	sink
 	) {

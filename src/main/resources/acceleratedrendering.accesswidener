@@ -82,5 +82,7 @@ accessible field net/minecraft/client/renderer/RenderStateShard$WriteMaskStateSh
 accessible class net/minecraft/client/gui/Font$StringRenderOutput
 #EMF
 
+accessible field net/minecraft/client/gui/GuiGraphics sprites Lnet/minecraft/client/gui/GuiSpriteManager;
+accessible method net/minecraft/client/gui/GuiSpriteManager getSprite (Lnet/minecraft/resources/ResourceLocation;)Lnet/minecraft/client/renderer/texture/TextureAtlasSprite;
 accessible field net/minecraft/client/gui/GuiGraphics bufferSource Lnet/minecraft/client/renderer/MultiBufferSource$BufferSource;
 accessible method net/minecraft/client/gui/Font$StringRenderOutput finish (F)F

@@ -11,6 +11,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.ItemRenderer;
+import net.minecraft.client.renderer.item.ItemStackRenderState;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.resources.ResourceLocation;
 import com.github.argon4w.acceleratedrendering.core.utils.FastColorCompat;
@@ -20,6 +21,8 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
+
+import java.util.function.Function;
 
 
 @Mixin(GuiGraphics.class)
@@ -193,95 +196,38 @@ public class GuiGraphicsMixin {
 		);
 	}
 
+	// 1.21.4 innerBlit: added Function<ResourceLocation, RenderType> param + trailing int; blitOffset removed
 	@WrapMethod(method = "innerBlit", remap = false, require = 0)
 	public void renderBlitFast(
-			ResourceLocation atlasLocation,
-			int					minX,
-			int					maxX,
-			int					minY,
-			int					maxY,
-			int					blitOffset,
-			float				minU,
-			float				maxU,
-			float				minV,
-			float				maxV,
-			Operation<Void>		original
+			Function<ResourceLocation, RenderType>	renderTypeGetter,
+			ResourceLocation						atlasLocation,
+			int										minX,
+			int										maxX,
+			int										minY,
+			int										maxY,
+			float									minU,
+			float									maxU,
+			float									minV,
+			float									maxV,
+			int										color,
+			Operation<Void>							original
 	) {
 		if (		!	CoreFeature.isLoaded				()
 				||	!	CoreFeature.isGuiBatching			()
 				||		CoreFeature.shouldByPassGuiBatching	()
 		) {
 			original.call(
+					renderTypeGetter,
 					atlasLocation,
 					minX,
 					maxX,
 					minY,
 					maxY,
-					blitOffset,
-					minU,
-					maxU,
-					minV,
-					maxV
-			);
-			return;
-		}
-
-		var last = pose.last();
-
-		GuiBatchingController.INSTANCE.submitBlit(
-				last.pose	(),
-				last.normal	(),
-				atlasLocation,
-				minX,
-				maxX,
-				minY,
-				maxY,
-				blitOffset,
-				-1,
-				minU,
-				maxU,
-				minV,
-				maxV
-		);
-	}
-
-	@WrapMethod(method = "innerBlit", remap = false, require = 0)
-	public void renderBlitFast(
-			ResourceLocation	atlasLocation,
-			int					minX,
-			int					maxX,
-			int					minY,
-			int					maxY,
-			int					blitOffset,
-			float				minU,
-			float				maxU,
-			float				minV,
-			float				maxV,
-			float				red,
-			float				green,
-			float				blue,
-			float				alpha,
-			Operation<Void>		original
-	) {
-		if (		!	CoreFeature.isLoaded				()
-				||	!	CoreFeature.isGuiBatching			()
-				||		CoreFeature.shouldByPassGuiBatching	()
-		) {
-			original.call(
-					atlasLocation,
-					minX,
-					maxX,
-					minY,
-					maxY,
-					blitOffset,
 					minU,
 					maxU,
 					minV,
 					maxV,
-					red,
-					green,
-					blue,
-					alpha
+					color
 			);
 			return;
 		}
@@ -296,71 +242,24 @@ public class GuiGraphicsMixin {
 				maxX,
 				minY,
 				maxY,
-				blitOffset,
-				FastColorCompat.ARGB32.color(
-						(int) (alpha	* 255.0f),
-						(int) (red		* 255.0f),
-						(int) (green	* 255.0f),
-						(int) (blue		* 255.0f)
-				),
+				0,
+				color,
 				minU,
 				maxU,
 				minV,
-				maxV
+				maxV,
+				null
 		);
 	}
 
-	@WrapOperation(
-			method	= "renderItem(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/level/Level;Lnet/minecraft/world/item/ItemStack;IIII)V",
-			at		= @At(
-					value	= "INVOKE",
-					target	= "Lnet/minecraft/client/renderer/entity/ItemRenderer;render(Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/item/ItemDisplayContext;ZLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;IILnet/minecraft/client/resources/model/BakedModel;)V"
-			)
-	)
-	public void renderItemFast(
-			ItemRenderer		instance,
-			ItemStack			itemStack,
-			ItemDisplayContext	displayContext,
-			boolean				leftHand,
-			PoseStack			poseStack,
-			MultiBufferSource	bufferSource,
-			int					combinedLight,
-			int					combinedOverlay,
-			BakedModel			bakedModel,
-			Operation<Void>		original
-	) {
-		if (		!AcceleratedItemRenderingFeature.isEnabled						()
-				||	!AcceleratedItemRenderingFeature.shouldUseAcceleratedPipeline	()
-				||	!AcceleratedItemRenderingFeature.shouldAccelerateInGui			()
-				||	!CoreFeature					.isLoaded						()
-				||	!CoreFeature					.isGuiBatching					()
-		) {
-			original.call(
-					instance,
-					itemStack,
-					displayContext,
-					leftHand,
-					poseStack,
-					bufferSource,
-					combinedLight,
-					combinedOverlay,
-					bakedModel
-			);
-			return;
-		}
-
-		var last = pose.last();
-
-		GuiBatchingController.INSTANCE.submitItem(
-				last.pose	(),
-				last.normal	(),
-				itemStack,
-				displayContext,
-				leftHand,
-				combinedLight,
-				combinedOverlay,
-				bakedModel,
-				bakedModel.usesBlockLight()
-		);
-	}
+	// TODO 1.21.4: renderItem no longer calls ItemRenderer.render();
+	// replaced by ItemModelResolver.updateForTopItem() + ItemStackRenderState.render()
+	// @WrapOperation(
+	//			method	= "renderItem(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/level/Level;Lnet/minecraft/world/item/ItemStack;IIII)V",
+	//			at		= @At(
+	//					value	= "INVOKE",
+	//					target	= "Lnet/minecraft/client/renderer/item/ItemStackRenderState;render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;II)V"
+	//			)
+	// )
+	// public void renderItemFast( ... ) { ... }
 }

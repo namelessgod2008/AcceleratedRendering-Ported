@@ -29,34 +29,27 @@
 | 实体模型加速 | `ModelPart` compile 加速，GPU 计算着色器并行变换 |
 | 实体阴影加速 | 加速方块阴影渲染 |
 | 物品加速 (世界) | 掉落物、手持物品加速渲染 |
-| 方块加速 | 方块模型渲染加速 (无着色) |
-| 文本加速 | `BakedGlyph`/`Font` 加速渲染 |
-| 核心管线 | 缓冲区管理、LevelRenderer 帧图钩子 |
+| 方块加速 | 方块模型渲染加速 (含着色) |
+| 文本加速 | `BakedGlyph`/`Font` 加速渲染 (参数语义 + 描述符修复) |
+| 模型加速 | Multipart、Weighted、SimpleBakedModel (1.21.4 API 适配) |
+| 核心管线 | 缓冲区管理、LevelRenderer 帧图钩子、wrapper 链 |
+| 实体/方块实体/容器过滤 | FilterFeature — 可选禁用特定类型加速 |
+| Vanilla 渲染层修复 | `LivingEntityRenderer` 渲染状态 API + `HumanoidArmorLayer` 装备渲染 |
+| 物品栏实体渲染 | `InventoryScreen` entity rendering (method_64045) |
+| GUI 批处理 (fill/blit/slot) | 容器界面填充/位块传输/槽位批处理，热键栏物品批处理 |
 
-### ⚠️ 部分兼容（功能降级）
+### ⚠️ 部分实现
 
-| 功能 | 问题 |
+| 功能 | 状态 |
 |------|------|
-| 方块着色 | 草方块、树叶等无生物群系着色 (无色调) |
-| 物品着色 | 药水、刷怪蛋等无颜色着色 |
-| MultiPart 模型 | 栅栏、墙、火等不加速 |
-| Weighted 模型 | 加权变体不加速 |
-| 粒子兼容 | 粒子渲染时不暂停加速管线 |
-| 手部物品 | 手部物品使用 vanilla 渲染 (不加速) |
-
-### ❌ 未实现
-
-| 功能 | 原因 |
-|------|------|
-| GUI 批处理 | `GuiGraphics` API 变化 (bufferSource→private) |
-| 字符串渲染输出 | `StringRenderOutput` 内部字段重构 |
-| 物品栏实体渲染 | `InventoryScreen` 方法重写 |
-| Vanilla 渲染层修复 | Entity render state 重构 |
-| 方块实体过滤器 | `tryRender` 方法改名 |
-| MultiPart/Weighted 模型 | `@Shadow` 字段不匹配 |
-| Iris 兼容 | 未验证 (需 Iris 1.8.5+1.21.4) |
-| ImmediatelyFast 兼容 | 未验证 (需 IF 1.3.4+1.21.4) |
-| 其他 mod 兼容 | Create, EMF, Geckolib, TLM, FTB, Trinkets, Tweakmore, Sophisticated, ModernUI |
+| 手部物品加速 | ❌ 不可行 — 坐标空间不匹配 (见 CLAUDE.md #4b) |
+| GUI 槽位高亮批处理 | ⚠️ renderSlotHighlight 拆分为 Back/Front，待 @Shadow |
+| GUI 字体批处理 | ⚠️ gui.FontMixin 禁用 — flushBatching 中字符串渲染为存根 |
+| StringRenderOutput | ❌ 禁用 — 内部字段重构 |
+| Iris 兼容 | ✅ `vanilla.LevelRendererMixin`→`method_62214`，需运行时验证 |
+| ModernUI 兼容 | ✅ ModernUI 3.12.0 适配 |
+| ImmediatelyFast 兼容 | ⚠️ @Pseudo — 未验证 |
+| 其他 mod 兼容 | ⚠️ Create, EMF, Geckolib, TLM, FTB, Trinkets, Tweakmore, Sophisticated |
 
 详细信息参见 [`TODO.md`](TODO.md)。
 

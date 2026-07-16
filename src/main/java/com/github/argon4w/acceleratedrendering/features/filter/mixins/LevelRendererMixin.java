@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.At;
 public class LevelRendererMixin {
 
 	@WrapOperation(
-			method	= "renderLevel",
+			method	= "renderEntities",
 			at		= @At(
 					value	= "INVOKE",
 					target	= "Lnet/minecraft/client/renderer/LevelRenderer;renderEntity(Lnet/minecraft/world/entity/Entity;DDDFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;)V"

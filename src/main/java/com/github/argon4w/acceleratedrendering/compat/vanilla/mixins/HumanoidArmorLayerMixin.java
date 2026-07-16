@@ -7,48 +7,55 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.entity.layers.EquipmentLayerRenderer;
 import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
-import net.minecraft.core.Holder;
-import net.minecraft.world.item.equipment.ArmorMaterial;
-import net.minecraft.world.item.equipment.trim.ArmorTrim;
+import net.minecraft.client.resources.model.EquipmentClientInfo;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
+/**
+ * 1.21.4 update — renderArmorPiece now takes ItemStack instead of LivingEntity.
+ * renderTrim no longer exists; trim is now handled by EquipmentLayerRenderer.renderLayers.
+ */
 @Mixin(HumanoidArmorLayer.class)
 public class HumanoidArmorLayerMixin {
 
-	@SuppressWarnings	("rawtypes")
-	@WrapOperation		(
-			method	= "renderArmorPiece(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/entity/EquipmentSlot;ILnet/minecraft/client/model/HumanoidModel;FFFFFF)V",
-			at		= @At(
-					value	= "INVOKE",
-					target	= "Lnet/minecraft/client/renderer/entity/layers/HumanoidArmorLayer;renderTrim(Lnet/minecraft/core/Holder;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/world/item/armortrim/ArmorTrim;Lnet/minecraft/client/model/Model;Z)V"
-			)
+	@SuppressWarnings("rawtypes")
+	@WrapOperation(
+		method = "renderArmorPiece",
+		remap = false,
+		at = @At(
+			value = "INVOKE",
+			target = "Lnet/minecraft/client/renderer/entity/layers/EquipmentLayerRenderer;renderLayers(Lnet/minecraft/client/resources/model/EquipmentClientInfo$LayerType;Lnet/minecraft/resources/ResourceKey;Lnet/minecraft/client/model/Model;Lnet/minecraft/world/item/ItemStack;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V"
+		)
 	)
 	public void setupTrimLayer(
-			HumanoidArmorLayer		instance,
-			Holder<ArmorMaterial>	armorMaterial,
-			PoseStack				poseStack,
-			MultiBufferSource		bufferSource,
-			int						packedLight,
-			ArmorTrim				trim,
-			Model					model,
-			boolean					innerTexture,
-			Operation<Void>			original
+		EquipmentLayerRenderer		instance,
+		EquipmentClientInfo.LayerType	layerType,
+		ResourceKey<?>				assetKey,
+		Model						model,
+		ItemStack					itemStack,
+		PoseStack					poseStack,
+		MultiBufferSource			bufferSource,
+		int							packedLight,
+		Operation<Void>				original
 	) {
 		if (		!CoreFeature.isLoaded			()
 				||	!ModsFeature.isEnabled			()
 				||	!ModsFeature.shouldFixVanilla	()
 		) {
 			original.call(
-					instance,
-					armorMaterial,
-					poseStack,
-					bufferSource,
-					packedLight,
-					trim,
-					model,
-					innerTexture
+				instance,
+				layerType,
+				assetKey,
+				model,
+				itemStack,
+				poseStack,
+				bufferSource,
+				packedLight
 			);
 			return;
 		}
@@ -56,14 +63,14 @@ public class HumanoidArmorLayerMixin {
 		CoreFeature.forceIncrementDefaultLayer();
 
 		original.call(
-				instance,
-				armorMaterial,
-				poseStack,
-				bufferSource,
-				packedLight,
-				trim,
-				model,
-				innerTexture
+			instance,
+			layerType,
+			assetKey,
+			model,
+			itemStack,
+			poseStack,
+			bufferSource,
+			packedLight
 		);
 
 		CoreFeature.resetDefaultLayer();

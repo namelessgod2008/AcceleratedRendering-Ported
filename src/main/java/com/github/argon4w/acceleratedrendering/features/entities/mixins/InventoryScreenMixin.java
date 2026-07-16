@@ -3,45 +3,41 @@ package com.github.argon4w.acceleratedrendering.features.entities.mixins;
 import com.github.argon4w.acceleratedrendering.core.CoreBuffers;
 import com.github.argon4w.acceleratedrendering.core.CoreFeature;
 import com.github.argon4w.acceleratedrendering.core.CoreStates;
-import com.github.argon4w.acceleratedrendering.core.buffers.accelerated.builders.BufferSourceExtension;
 import com.github.argon4w.acceleratedrendering.core.buffers.accelerated.layers.LayerDrawType;
 import com.github.argon4w.acceleratedrendering.features.entities.AcceleratedEntityRenderingFeature;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.mojang.blaze3d.platform.Lighting;
-import lombok.experimental.ExtensionMethod;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.world.entity.LivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
 
-@ExtensionMethod(BufferSourceExtension	.class)
-@Mixin			(InventoryScreen		.class)
+/**
+ * 1.21.4 update — method_29977 replaced by method_64045:
+ * renderEntityInInventory → method_64045(EntityRenderDispatcher, LivingEntity, GuiGraphics, MultiBufferSource)
+ */
+@Mixin(InventoryScreen.class)
 public class InventoryScreenMixin {
 
-	// @WrapMethod(method = "method_29977") -- TODO: removed in 1.21.4
+	@WrapMethod(method = "method_64045", remap = false)
 	private static void startRenderingGui(
-        EntityRenderDispatcher	entityRenderDispatcher,
-        LivingEntity			entity,
-        GuiGraphics				guiGraphics,
-        Operation<Void> operation
+		EntityRenderDispatcher	entityRenderDispatcher,
+		LivingEntity			entity,
+		GuiGraphics				guiGraphics,
+		MultiBufferSource		bufferSource,
+		Operation<Void>			operation
 	) {
 		if (		!CoreFeature									.isLoaded						()
-// TODO 1.21.4: 				||	!guiGraphics.bufferSource().getAcceleratable()	.isBufferSourceAcceleratable	()
 				||	!AcceleratedEntityRenderingFeature				.isEnabled						()
 				||	!AcceleratedEntityRenderingFeature				.shouldUseAcceleratedPipeline	()
 				||	!AcceleratedEntityRenderingFeature				.shouldAccelerateInGui			()
 		) {
-			operation.call(
-					entityRenderDispatcher,
-					entity,
-					guiGraphics
-			);
+			operation.call(entityRenderDispatcher, entity, guiGraphics, bufferSource);
 			return;
 		}
-
-
 
 		if (CoreFeature.isGuiBatching()) {
 			CoreFeature.forceSetDefaultLayer				(2);
@@ -51,11 +47,7 @@ public class InventoryScreenMixin {
 
 		CoreFeature.setRenderingGui();
 
-		operation.call(
-				entityRenderDispatcher,
-				entity,
-				guiGraphics
-		);
+		operation.call(entityRenderDispatcher, entity, guiGraphics, bufferSource);
 
 		CoreFeature.resetRenderingGui();
 
@@ -63,32 +55,32 @@ public class InventoryScreenMixin {
 			CoreFeature.resetDefaultLayer				();
 			CoreFeature.resetDefaultLayerBeforeFunction	();
 			CoreFeature.resetDefaultLayerAfterFunction	();
-		} else {
-			CoreStates						.recordBuffers	();
-			CoreBuffers.ENTITY				.prepareBuffers	();
-			CoreBuffers.BLOCK				.prepareBuffers	();
-			CoreBuffers.POS					.prepareBuffers	();
-			CoreBuffers.POS_COLOR			.prepareBuffers	();
-			CoreBuffers.POS_TEX				.prepareBuffers	();
-			CoreBuffers.POS_TEX_COLOR		.prepareBuffers	();
-			CoreBuffers.POS_COLOR_TEX_LIGHT	.prepareBuffers	();
-			CoreStates						.restoreBuffers	();
-
-			CoreBuffers.ENTITY				.drawBuffers	(LayerDrawType.ALL);
-			CoreBuffers.BLOCK				.drawBuffers	(LayerDrawType.ALL);
-			CoreBuffers.POS					.drawBuffers	(LayerDrawType.ALL);
-			CoreBuffers.POS_COLOR			.drawBuffers	(LayerDrawType.ALL);
-			CoreBuffers.POS_TEX				.drawBuffers	(LayerDrawType.ALL);
-			CoreBuffers.POS_TEX_COLOR		.drawBuffers	(LayerDrawType.ALL);
-			CoreBuffers.POS_COLOR_TEX_LIGHT	.drawBuffers	(LayerDrawType.ALL);
-
-			CoreBuffers.ENTITY				.clearBuffers	();
-			CoreBuffers.BLOCK				.clearBuffers	();
-			CoreBuffers.POS					.clearBuffers	();
-			CoreBuffers.POS_COLOR			.clearBuffers	();
-			CoreBuffers.POS_TEX				.clearBuffers	();
-			CoreBuffers.POS_TEX_COLOR		.clearBuffers	();
-			CoreBuffers.POS_COLOR_TEX_LIGHT	.clearBuffers	();
 		}
+
+		CoreStates						.recordBuffers	();
+		CoreBuffers.ENTITY				.prepareBuffers	();
+		CoreBuffers.BLOCK				.prepareBuffers	();
+		CoreBuffers.POS					.prepareBuffers	();
+		CoreBuffers.POS_COLOR			.prepareBuffers	();
+		CoreBuffers.POS_TEX				.prepareBuffers	();
+		CoreBuffers.POS_TEX_COLOR		.prepareBuffers	();
+		CoreBuffers.POS_COLOR_TEX_LIGHT	.prepareBuffers	();
+		CoreStates						.restoreBuffers	();
+
+		CoreBuffers.ENTITY				.drawBuffers	(LayerDrawType.ALL);
+		CoreBuffers.BLOCK				.drawBuffers	(LayerDrawType.ALL);
+		CoreBuffers.POS					.drawBuffers	(LayerDrawType.ALL);
+		CoreBuffers.POS_COLOR			.drawBuffers	(LayerDrawType.ALL);
+		CoreBuffers.POS_TEX				.drawBuffers	(LayerDrawType.ALL);
+		CoreBuffers.POS_TEX_COLOR		.drawBuffers	(LayerDrawType.ALL);
+		CoreBuffers.POS_COLOR_TEX_LIGHT	.drawBuffers	(LayerDrawType.ALL);
+
+		CoreBuffers.ENTITY				.clearBuffers	();
+		CoreBuffers.BLOCK				.clearBuffers	();
+		CoreBuffers.POS					.clearBuffers	();
+		CoreBuffers.POS_COLOR			.clearBuffers	();
+		CoreBuffers.POS_TEX				.clearBuffers	();
+		CoreBuffers.POS_TEX_COLOR		.clearBuffers	();
+		CoreBuffers.POS_COLOR_TEX_LIGHT	.clearBuffers	();
 	}
 }

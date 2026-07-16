@@ -88,18 +88,11 @@ public class GuiBatchingController {
 
 	@SuppressWarnings("UnstableApiUsage")
 	public float flushBatching(GuiGraphics graphics) {
-		// TODO 1.21.4: GuiBatchingController needs full refactor due to GuiGraphics.bufferSource becoming private
-		// and ItemRenderer.render() API changes. GUI item batching is temporarily disabled.
-		return 0.0f;
-		/*
 		if (CoreFeature.isGuiBatching()) {
-			var itemRenderer	= Minecraft.getInstance()	.getItemRenderer();
-			var bufferSource	= graphics					.bufferSource;
-			var poseStack		= graphics					.pose			();
-			var offset			= 0.0f;
+			var poseStack = graphics.pose();
+			var offset    = 0.0f;
 
 			CoreFeature.resetGuiBatching();
-			CoreFeature.setRenderingGui	();
 
 			for (var depthLayer : depthLayers.values()) {
 				var layerElements	= depthLayer	.getLayerElements	();
@@ -126,7 +119,7 @@ public class GuiBatchingController {
 			}
 
 			for (var context : blitDrawContexts) {
-// TODO 1.21.4: 				var extension = graphics.bufferSource.getBuffer(GuiRenderTypes.blit(context.atlasLocation())).getAccelerated();
+var extension = graphics.bufferSource.getBuffer(context.renderTypeGetter() != null ? context.renderTypeGetter().apply(context.atlasLocation()) : GuiRenderTypes.blit(context.atlasLocation())).getAccelerated();
 
 				if (extension.isAccelerated()) {
 					extension.doRender(
@@ -142,7 +135,7 @@ public class GuiBatchingController {
 			}
 
 			for (var context : fillDrawContexts) {
-// TODO 1.21.4: 				var extension = graphics.bufferSource.getBuffer(context.renderType()).getAccelerated();
+var extension = graphics.bufferSource.getBuffer(context.renderType()).getAccelerated();
 
 				if (extension.isAccelerated()) {
 					extension.doRender(
@@ -158,7 +151,7 @@ public class GuiBatchingController {
 			}
 
 			for (var context : gradientDrawContexts) {
-// TODO 1.21.4: 				var extension = graphics.bufferSource.getBuffer(context.renderType()).getAccelerated();
+var extension = graphics.bufferSource.getBuffer(context.renderType()).getAccelerated();
 
 				if (extension.isAccelerated()) {
 					extension.doRender(
@@ -174,7 +167,7 @@ public class GuiBatchingController {
 			}
 
 			for (var context : stringDrawContexts) {
-// TODO 1.21.4: 				context.drawString(graphics.bufferSource);
+context.drawString(graphics.bufferSource);
 			}
 
 			scissorFlush.record	(graphics);
@@ -185,23 +178,9 @@ public class GuiBatchingController {
 			CoreFeature	.forceSetDefaultLayerBeforeFunction	(Lighting::setupForFlatItems);
 			CoreFeature	.forceSetDefaultLayerAfterFunction	(Lighting::setupFor3DItems);
 
-			for (var context : flatItemDrawContexts) {
-				poseStack.pushPose	();
-				poseStack.setPose	(context.transform(), context.normal());
+			var resolver = Minecraft.getInstance().getItemModelResolver();
 
-				itemRenderer.render(
-						context.itemStack		(),
-						context.displayContext	(),
-						context.leftHand		(),
-						poseStack,
-						bufferSource,
-						context.combinedLight	(),
-						context.combinedOverlay	(),
-						context.bakedModel		()
-				);
-
-				poseStack.popPose();
-			}
+			renderItemContexts(resolver, graphics, poseStack, flatItemDrawContexts);
 
 			graphics	.flush							();
 			Lighting	.setupFor3DItems				();
@@ -209,28 +188,11 @@ public class GuiBatchingController {
 			CoreFeature	.resetDefaultLayerBeforeFunction();
 			CoreFeature	.resetDefaultLayerAfterFunction	();
 
-			for (var context : blockItemDrawContexts) {
-				poseStack.pushPose	();
-				poseStack.setPose	(context.transform(), context.normal());
+			renderItemContexts(resolver, graphics, poseStack, blockItemDrawContexts);
 
-				itemRenderer.render(
-						context.itemStack		(),
-						context.displayContext	(),
-						context.leftHand		(),
-						poseStack,
-						bufferSource,
-						context.combinedLight	(),
-						context.combinedOverlay	(),
-						context.bakedModel		()
-				);
-
-				poseStack.popPose();
-			}
-
-			CoreFeature	.resetRenderingGui	();
 			graphics	.flush				();
 			flushBatching					();
-            //TODO IMPLEMENT FOR FABRIC
+			// Decorator + highlight batching removed — dead NeoForge API / obsoleted by blitSprite
 //			for (var context : decoratorDrawContexts) {
 //				poseStack.pushPose	();
 //				poseStack.setPose	(context.transform(), context.normal());
@@ -246,16 +208,17 @@ public class GuiBatchingController {
 //				graphics.pose().popPose();
 //			}
 
+			// Slot highlights batched via blitSprite→submitBlit (see AbstractContainerScreenMixin) — highlight batching disabled
 			for (var context : highlightDrawContexts) {
 				poseStack.pushPose	();
 				poseStack.setPose	(context.transform(), context.normal());
 
-// TODO 1.21.4: 				AbstractContainerScreen.renderSlotHighlight(
-// TODO 1.21.4: 						graphics,
-// TODO 1.21.4: 						context.highlightX	(),
-// TODO 1.21.4: 						context.highlightY	(),
-// TODO 1.21.4: 						context.blitOffset	()
-// TODO 1.21.4: 				);
+// 1.21.4 disabled: 				Slot highlights routed via blitSprite→submitBlit
+// 1.21.4 disabled: 						graphics,
+// 1.21.4 disabled: 						context.highlightX	(),
+// 1.21.4 disabled: 						context.highlightY	(),
+// 1.21.4 disabled: 						context.blitOffset	()
+// 1.21.4 disabled: 				);
 
 				graphics.pose().popPose();
 			}
@@ -274,7 +237,7 @@ public class GuiBatchingController {
 			return offset;
 		}
 
-		*/
+		return 0.0f;
 	}
 
 	public void flushBatching() {
@@ -282,8 +245,6 @@ public class GuiBatchingController {
 		CoreBuffers.POS					.prepareBuffers	();
 		CoreBuffers.POS_TEX_COLOR		.prepareBuffers	();
 		CoreBuffers.POS_COLOR_TEX_LIGHT	.prepareBuffers	();
-		CoreBuffers.ENTITY				.prepareBuffers	();
-		CoreBuffers.BLOCK				.prepareBuffers	();
 		CoreBuffers.POS_COLOR			.prepareBuffers	();
 		CoreBuffers.POS_TEX				.prepareBuffers	();
 		CoreStates						.restoreBuffers	();
@@ -291,16 +252,12 @@ public class GuiBatchingController {
 		CoreBuffers.POS					.drawBuffers	(LayerDrawType.ALL);
 		CoreBuffers.POS_TEX_COLOR		.drawBuffers	(LayerDrawType.ALL);
 		CoreBuffers.POS_COLOR_TEX_LIGHT	.drawBuffers	(LayerDrawType.ALL);
-		CoreBuffers.ENTITY				.drawBuffers	(LayerDrawType.ALL);
-		CoreBuffers.BLOCK				.drawBuffers	(LayerDrawType.ALL);
 		CoreBuffers.POS_COLOR			.drawBuffers	(LayerDrawType.ALL);
 		CoreBuffers.POS_TEX				.drawBuffers	(LayerDrawType.ALL);
 
 		CoreBuffers.POS					.clearBuffers	();
 		CoreBuffers.POS_TEX_COLOR		.clearBuffers	();
 		CoreBuffers.POS_COLOR_TEX_LIGHT	.clearBuffers	();
-		CoreBuffers.ENTITY				.clearBuffers	();
-		CoreBuffers.BLOCK				.clearBuffers	();
 		CoreBuffers.POS_COLOR			.clearBuffers	();
 		CoreBuffers.POS_TEX				.clearBuffers	();
 	}
@@ -318,7 +275,8 @@ public class GuiBatchingController {
 			float				minU,
 			float				maxU,
 			float				minV,
-			float				maxV
+			float				maxV,
+			java.util.function.Function<ResourceLocation, net.minecraft.client.renderer.RenderType> renderTypeGetter
 	) {
 		var layer = getLayer(getGlobalDepth(
 				transform.m22(),
@@ -341,7 +299,8 @@ public class GuiBatchingController {
 				minU,
 				maxU,
 				minV,
-				maxV
+				maxV,
+				renderTypeGetter
 		);
 
 		blitDrawContexts.add(context);
@@ -591,6 +550,17 @@ public class GuiBatchingController {
 		}
 
 		return layer;
+	}
+
+	private void renderItemContexts(net.minecraft.client.renderer.item.ItemModelResolver resolver, GuiGraphics graphics, com.mojang.blaze3d.vertex.PoseStack poseStack, List<ItemRenderContext> contexts) {
+		for (var context : contexts) {
+			var state = new net.minecraft.client.renderer.item.ItemStackRenderState();
+			resolver.updateForTopItem(state, context.itemStack(), context.displayContext(), context.leftHand(), null, null, 0);
+			poseStack.pushPose();
+			poseStack.setPose(context.transform(), context.normal());
+			state.render(poseStack, graphics.bufferSource, context.combinedLight(), context.combinedOverlay());
+			poseStack.popPose();
+		}
 	}
 
 	public static float getGlobalDepth(

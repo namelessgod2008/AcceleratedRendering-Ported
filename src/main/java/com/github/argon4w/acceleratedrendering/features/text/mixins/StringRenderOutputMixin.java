@@ -38,15 +38,11 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 	@Shadow										float						y;
 	@Shadow(aliases = "field_24240") 	@Final	Font						this$0;
 	@Shadow 							@Final	MultiBufferSource			bufferSource;
+	@Shadow 							@Final	private	int					color;			// 1.21.4: packed color (was r/g/b/a floats)
 
 	@Shadow @Final @Mutable private	Font.DisplayMode			mode;
 	@Shadow @Final private			Matrix4f					pose;
-	@Shadow @Final private			boolean						dropShadow;
-	@Shadow @Final private			float						dimFactor;
-	@Shadow @Final private			float						r;
-	@Shadow @Final private			float						g;
-	@Shadow @Final private			float						b;
-	@Shadow @Final private			float						a;
+	@Shadow @Final private			boolean						drawShadow;		// 1.21.4: renamed from dropShadow
 	@Shadow @Final private			int							packedLightCoords;
 
 	@Unique private static final	Matrix4f					SCRATCH	= new Matrix4f().identity		();
@@ -58,7 +54,7 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 	@Unique private					Style						style		= null;
 	@Unique private					boolean						accelerated	= false;
 	@Unique private					boolean						outline		= false;
-	@Unique private					int							color		= 0;
+	@Unique private					int							computedColor= 0;	// our calculated rendering color
 	@Unique private					float						advance		= 0.0f;
 
 	@Inject(
@@ -136,7 +132,7 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 				glyph = fontSet.getRandomGlyph(info);
 
 				var boldOffset		= bold			? info.getBoldOffset	() : 0.0f;
-				var shadowOffset	= dropShadow	? info.getShadowOffset	() : 0.0f;
+				var shadowOffset	= drawShadow	? info.getShadowOffset	() : 0.0f;
 
 				var extension1 = glyph							.getAccelerated();
 				var extension2 = bufferSource.getBuffer(type)	.getAccelerated();
@@ -158,7 +154,7 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 							NORMAL,
 							packedLightCoords,
 							OverlayTexture.NO_OVERLAY,
-							color
+							computedColor
 					);
 
 					if (bold) {
@@ -175,7 +171,7 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 								NORMAL,
 								packedLightCoords,
 								OverlayTexture.NO_OVERLAY,
-								color
+								computedColor
 						);
 					}
 				} else {
@@ -196,7 +192,6 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 			at		= @At("HEAD")
 	)
 	public void onFinish(
-			int								backgroundColor,
 			float							x,
 			CallbackInfoReturnable<Float>	cir
 	) {
@@ -211,26 +206,17 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 		var textColor = style.getColor();
 
 		if (textColor != null) {
-			this.color = textColor.getValue();
-			this.color = FastColorCompat.ARGB32.color(
-					(int) (a * 255.0f),
-					(int) (FastColorCompat.ARGB32.red		(this.color) * dimFactor),
-					(int) (FastColorCompat.ARGB32.green	(this.color) * dimFactor),
-					(int) (FastColorCompat.ARGB32.blue	(this.color) * dimFactor)
-			);
+			// Style has a specific color — use it directly (1.21.4: no dimFactor)
+			this.computedColor = textColor.getValue();
 		} else {
-			this.color = FastColorCompat.ARGB32.color(
-					(int) (a * 255.0f),
-					(int) (r * 255.0f),
-					(int) (g * 255.0f),
-					(int) (b * 255.0f)
-			);
+			// Use the base color from the constructor (vanilla's packed color field)
+			this.computedColor = color;
 		}
 
 		MUTABLE.reset		();
 		MUTABLE.setStyle	(
 				this.style,
-				this.dropShadow,
+				this.drawShadow,
 				this.outline
 		);
 	}
@@ -249,7 +235,7 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 		this.style		= null;
 		this.type		= null;
 		this.outline	= false;
-		this.color		= 0;
+		this.computedColor	= 0;
 		this.advance	= 0.0f;
 
 		MUTABLE.reset();
@@ -283,7 +269,7 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 					NORMAL,
 					packedLightCoords,
 					OverlayTexture.NO_OVERLAY,
-					color
+					computedColor
 			);
 		} else {
 			throw new IllegalStateException("Someone uses incorrect render type in the baked glyph.");
@@ -302,7 +288,7 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 						NORMAL,
 						packedLightCoords,
 						OverlayTexture.NO_OVERLAY,
-						color
+						computedColor
 				);
 			} else {
 				throw new IllegalStateException("Someone uses incorrect render type in the baked glyph.");
@@ -335,7 +321,7 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 	@Unique
 	@Override
 	public void setColor(int color) {
-		this.color = color;
+		this.computedColor = color;
 	}
 
 	@Unique
@@ -353,6 +339,6 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 	@Unique
 	@Override
 	public ComponentMesh bake() {
-		return mesh == null ? null : mesh.build(dropShadow);
+		return mesh == null ? null : mesh.build(drawShadow);
 	}
 }

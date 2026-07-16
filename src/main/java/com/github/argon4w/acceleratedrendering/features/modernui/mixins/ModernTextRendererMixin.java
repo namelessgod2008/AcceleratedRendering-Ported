@@ -23,10 +23,10 @@ import org.spongepowered.asm.mixin.injection.At;
 public class ModernTextRendererMixin {
 
 	@WrapOperation(
-			method	= "drawText(Licyllis/modernui/mc/text/TextLayout;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;II)F",
+			method	= "drawText(Licyllis/modernui/mc/text/TextLayout;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/client/gui/Font$DisplayMode;IIZ)F",
 			at		= @At(
 					value	= "INVOKE",
-					target	= "Licyllis/modernui/mc/text/TextLayout;drawText(Lorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;FFIIIIZIZFII)F"
+					target	= "Licyllis/modernui/mc/text/TextLayout;drawText(Lorg/joml/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;FFIIIIZIZFIIZ)F"
 			)
 	)
 	public float renderTextFast(
@@ -45,6 +45,7 @@ public class ModernTextRendererMixin {
 			float				uniformScale,
 			int					backgroundColor,
 			int					packedLight,
+			boolean				isSdf,
 			Operation<Float>	original
 	) {
 		if (		!	CoreFeature.isLoaded				()
@@ -68,7 +69,8 @@ public class ModernTextRendererMixin {
 					polygonOffset,
 					uniformScale,
 					backgroundColor,
-					packedLight
+					packedLight,
+					isSdf
 			);
 		}
 
