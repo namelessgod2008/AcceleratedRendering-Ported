@@ -1,0 +1,68 @@
+package com.namelessgod2008.features.filter.mixins;
+
+import com.namelessgod2008.core.CoreFeature;
+import com.namelessgod2008.features.entities.AcceleratedEntityRenderingFeature;
+import com.namelessgod2008.features.filter.FilterFeature;
+import com.namelessgod2008.features.items.AcceleratedItemRenderingFeature;
+import com.namelessgod2008.features.text.AcceleratedTextRenderingFeature;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.renderer.entity.ItemRenderer;
+import net.minecraft.client.resources.model.BakedModel;
+import net.minecraft.world.item.ItemStack;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+
+@Mixin(
+		value		= ItemRenderer.class,
+		priority	= 1001
+)
+public class ItemRendererMixin {
+
+// TODO 1.21.4: 	@WrapOperation(
+// TODO 1.21.4: 			method	= "render",
+// TODO 1.21.4: 			at		= @At(
+// TODO 1.21.4: 					value	= "INVOKE",
+// TODO 1.21.4: 					target	= "Lnet/minecraft/client/renderer/entity/ItemRenderer;renderModelLists(Lnet/minecraft/client/resources/model/BakedModel;Lnet/minecraft/world/item/ItemStack;IILcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;)V"
+// TODO 1.21.4: 			)
+// TODO 1.21.4: 	)
+	public void filterItem(
+			ItemRenderer	instance,
+			BakedModel		bakedModel,
+			ItemStack		itemStack,
+			int				stack,
+			int				combinedLight,
+			PoseStack		combinedOverlay,
+			VertexConsumer	poseStack,
+			Operation<Void>	original
+	) {
+		var pass =	!	CoreFeature		.isLoaded			()
+				||	!	FilterFeature	.isEnabled			()
+				||	!	FilterFeature	.shouldFilterItems	()
+				||		FilterFeature	.testItem			(itemStack);
+
+		if (!pass) {
+			AcceleratedEntityRenderingFeature	.useVanillaPipeline();
+			AcceleratedItemRenderingFeature		.useVanillaPipeline();
+			AcceleratedTextRenderingFeature		.useVanillaPipeline();
+		}
+
+		original.call(
+				instance,
+				bakedModel,
+				itemStack,
+				stack,
+				combinedLight,
+				combinedOverlay,
+				poseStack
+		);
+
+		if (!pass) {
+			AcceleratedEntityRenderingFeature	.resetPipeline();
+			AcceleratedItemRenderingFeature		.resetPipeline();
+			AcceleratedTextRenderingFeature		.resetPipeline();
+		}
+	}
+}

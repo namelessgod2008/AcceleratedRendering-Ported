@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "refmap": "acceleratedrendering-refmap.json",
+  "minVersion": "0.8",
+  "package": "com.namelessgod2008.features.modelparts.mixins",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ModelPartMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

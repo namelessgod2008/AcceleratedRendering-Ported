@@ -1,0 +1,112 @@
+package com.namelessgod2008.features.text.renderers;
+
+import com.namelessgod2008.core.buffers.accelerated.builders.IBufferGraph;
+import com.namelessgod2008.core.buffers.accelerated.builders.VertexConsumerExtension;
+import com.namelessgod2008.core.buffers.accelerated.renderers.IAcceleratedRenderer;
+import com.namelessgod2008.core.meshes.IMesh;
+import com.namelessgod2008.core.meshes.collectors.SimpleMeshCollector;
+import com.namelessgod2008.features.text.AcceleratedTextRenderingFeature;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import it.unimi.dsi.fastutil.objects.Object2ObjectArrayMap;
+import lombok.experimental.ExtensionMethod;
+import net.minecraft.client.gui.font.glyphs.BakedGlyph;
+import org.joml.Matrix3f;
+import org.joml.Matrix4f;
+import org.joml.Vector2f;
+import org.joml.Vector3f;
+
+import java.util.Map;
+
+@ExtensionMethod(VertexConsumerExtension.class)
+public class AcceleratedBakedGlyphRenderer implements IAcceleratedRenderer<Void> {
+
+	private final Map<IBufferGraph, IMesh>	meshes;
+	private final BakedGlyph				bakedGlyph;
+	private final boolean					italic;
+
+	public AcceleratedBakedGlyphRenderer(BakedGlyph bakedGlyph, boolean italic) {
+		this.meshes		= new Object2ObjectArrayMap<>();
+		this.bakedGlyph	= bakedGlyph;
+		this.italic		= italic;
+	}
+
+	@Override
+	public void render(
+			VertexConsumer	vertexConsumer,
+			Void			context,
+			Matrix4f		transform,
+			Matrix3f		normal,
+			int				light,
+			int				overlay,
+			int				color
+	) {
+		var extension	= vertexConsumer.getAccelerated	();
+		var mesh		= meshes		.get			(extension);
+
+		extension.beginTransform(transform, normal);
+
+		if (mesh != null) {
+			mesh.write(
+					extension,
+					color,
+					light,
+					overlay
+			);
+
+			extension.endTransform();
+			return;
+		}
+
+		var meshCollector		= new SimpleMeshCollector	(extension.getLayout());
+		var meshBuilder			= extension.decorate		(meshCollector);
+
+		var italicOffsetUp		= italic ? 1.0f - 0.25f * bakedGlyph.up		: 0.0f;
+		var italicOffsetDown	= italic ? 1.0f - 0.25f * bakedGlyph.down	: 0.0f;
+
+		var positions = new Vector2f[] {
+				new Vector2f(bakedGlyph.left	+ italicOffsetUp,	bakedGlyph.up),
+				new Vector2f(bakedGlyph.left	+ italicOffsetDown,	bakedGlyph.down),
+				new Vector2f(bakedGlyph.right	+ italicOffsetDown,	bakedGlyph.down),
+				new Vector2f(bakedGlyph.right	+ italicOffsetUp,	bakedGlyph.up)
+		};
+
+		var texCoords = new Vector2f[] {
+				new Vector2f(bakedGlyph.u0, bakedGlyph.v0),
+				new Vector2f(bakedGlyph.u0, bakedGlyph.v1),
+				new Vector2f(bakedGlyph.u1, bakedGlyph.v1),
+				new Vector2f(bakedGlyph.u1, bakedGlyph.v0),
+		};
+
+		for (var i = 0; i < 4; i ++) {
+			var position = new Vector3f(positions[i], 0.0f);
+			var texCoord = texCoords[i];
+
+			meshBuilder
+					.addVertex	(position)
+					.setColor	(-1)
+					.setUv		(texCoord.x, texCoord.y)
+					.setLight	(0);
+		}
+
+		var builder = AcceleratedTextRenderingFeature
+				.getMeshType()
+				.getBuilder	();
+
+		mesh = builder.build(
+				meshCollector,
+				false,
+				true,
+				0
+		);
+
+		meshes	.put	(extension, mesh);
+		mesh	.write	(
+				extension,
+				color,
+				light,
+				overlay
+		);
+
+		extension.endTransform();
+	}
+}

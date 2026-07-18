@@ -1,0 +1,155 @@
+plugins {
+	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
+	id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+loom {
+	accessWidenerPath = file("src/main/resources/acceleratedrendering.accesswidener")
+}
+
+repositories {
+	// Add repositories to retrieve artifacts from in here.
+	// You should only use this when depending on other mods because
+	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
+	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
+	// for more information about repositories.
+	maven {
+		name = 'ParchmentMC'
+		url = 'https://maven.parchmentmc.org'
+	}
+	maven {
+		name = "Terraformers"
+		url = "https://maven.terraformersmc.com/"
+	}
+	maven {
+		name = "Fuzs Mod Resources"
+		url = "https://raw.githubusercontent.com/Fuzss/modresources/main/maven/"
+	}
+	maven {
+		name = "TerraformersMC"
+		url = "https://maven.terraformersmc.com/"
+	}
+	maven {
+		name = "Ladysnake Libs"
+		url = 'https://maven.ladysnake.org/releases'
+	}
+	exclusiveContent {
+		forRepository {
+			maven {
+				name = "Modrinth"
+				url = "https://api.modrinth.com/maven"
+			}
+		}
+		filter {
+			includeGroup "maven.modrinth"
+		}
+	}
+	maven {
+		url "https://cursemaven.com"
+		content {
+			includeGroup "curse.maven"
+		}
+	}
+	maven {
+		url = "https://raw.github.com/Sh1roCu/Sh1roCu_MCRepo/master/repository"
+	}
+}
+
+fabricApi {
+	configureDataGeneration {
+		client = true
+	}
+}
+
+dependencies {
+	// To change the versions see the gradle.properties file
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings loom.layered() {
+		officialMojangMappings()
+		parchment("org.parchmentmc.data:parchment-1.21.4:2025.03.23@zip")
+	}
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation("com.terraformersmc:modmenu:${project.modmenu_version}")
+	modImplementation("fuzs.forgeconfigapiport:forgeconfigapiport-fabric:21.4.3")
+	// Fabric API. This is technically optional, but you probably want it anyway.
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+	modCompileOnly "maven.modrinth:sodium:mc1.21.4-0.6.13-fabric"
+	modCompileOnly "maven.modrinth:iris:1.8.8+1.21.4-fabric"
+	modCompileOnly "maven.modrinth:modern-ui:3.12.0.3"
+	modCompileOnly "maven.modrinth:geckolib:4.8.5"
+	modCompileOnly "maven.modrinth:entity-model-features:3.2.4-fabric-1.21.4"
+	modCompileOnly "maven.modrinth:immediatelyfast:1.8.7+1.21.4-fabric"
+	modCompileOnly "maven.modrinth:axiom:ItmR0IzD"
+	modCompileOnly "maven.modrinth:malilib:ifi4uRpL"
+	modCompileOnly "maven.modrinth:tweakermore:opXShlFN"
+	modCompileOnly "maven.modrinth:trinkets-canary:3.10.0-1.21.4"
+	modCompileOnly "maven.modrinth:touhoulittlemaid-orihime:0.8.2-neo1.5.3+mc1.21.1"
+	modCompileOnly "curse.maven:ftb-library-fabric-438495:7312255"
+
+
+	compileOnly("com.moulberry:mixinconstraints:1.1.0")
+	compileOnly("org.projectlombok:lombok:1.18.46")
+	annotationProcessor("org.projectlombok:lombok:1.18.46")
+
+	include implementation("net.neoforged:bus:8.0.5")
+}
+
+processResources {
+	var replaceProperties = [
+			minecraft_version: minecraft_version,
+			mod_id           : mod_id,
+			mod_name         : mod_name,
+			mod_license      : mod_license,
+			mod_version      : mod_version,
+			mod_authors      : mod_authors,
+			mod_description  : mod_description
+	]
+	inputs.properties replaceProperties
+
+	filesMatching("fabric.mod.json") {
+		expand replaceProperties
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+}
+
+java {
+	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
+	// if it is present.
+	// If you remove this line, sources will not be generated.
+	withSourcesJar()
+
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+jar {
+	def projectName = project.name
+	inputs.property "projectName", projectName
+
+	from("LICENSE") {
+		rename { "${it}_$projectName"}
+	}
+}
+
+// configure the maven publication
+publishing {
+	publications {
+		create("mavenJava", MavenPublication) {
+			from components.java
+		}
+	}
+
+	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
+	repositories {
+		// Add repositories to publish to here.
+		// Notice: This block does NOT have the same function as the block in the top level.
+		// The repositories here will be used for publishing your artifact, not for
+		// retrieving dependencies.
+	}
+}

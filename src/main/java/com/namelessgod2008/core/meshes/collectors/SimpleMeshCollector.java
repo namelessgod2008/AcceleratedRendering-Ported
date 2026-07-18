@@ -1,0 +1,213 @@
+package com.namelessgod2008.core.meshes.collectors;
+
+import com.namelessgod2008.core.buffers.memory.IMemoryInterface;
+import com.namelessgod2008.core.buffers.memory.VertexLayout;
+import com.namelessgod2008.core.meshes.data.MeshData;
+import com.namelessgod2008.core.utils.PackedVector2i;
+import com.mojang.blaze3d.vertex.ByteBufferBuilder;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.blaze3d.vertex.VertexFormatElement;
+import lombok.Getter;
+import com.namelessgod2008.core.utils.FastColorCompat;
+
+public class SimpleMeshCollector implements IMeshCollector {
+
+	@Getter private	final	VertexLayout		layout;
+	@Getter private	final	ByteBufferBuilder	buffer;
+
+	private			final	long				vertexSize;
+	private			final	IMemoryInterface	posOffset;
+	private			final	IMemoryInterface	colorOffset;
+	private			final	IMemoryInterface	uv0Offset;
+	private			final	IMemoryInterface	uv2Offset;
+	private			final	IMemoryInterface	normalOffset;
+	private			final	MeshData.Builder	builder;
+
+	private					MeshData			meshData;
+	@Getter private			long				vertexAddress;
+	@Getter private			long				vertexCount;
+
+	public SimpleMeshCollector(VertexLayout layout) {
+		this.layout			= layout;
+		this.buffer			= new ByteBufferBuilder	(1024);
+
+		this.vertexSize		= this.layout	.getSize		();
+		this.posOffset		= this.layout	.getElement		(VertexFormatElement.POSITION);
+		this.colorOffset	= this.layout	.getElement		(VertexFormatElement.COLOR);
+		this.uv0Offset		= this.layout	.getElement		(VertexFormatElement.UV);
+		this.uv2Offset		= this.layout	.getElement		(VertexFormatElement.UV2);
+		this.normalOffset	= this.layout	.getElement		(VertexFormatElement.NORMAL);
+		this.builder		= MeshData		.builder		(layout);
+
+		this.vertexAddress	= -1L;
+		this.vertexCount	= 0L;
+	}
+
+	@Override
+	public void flush() {
+		builder.addVertex();
+	}
+
+	@Override
+	public VertexConsumer addVertex(
+			float pX,
+			float pY,
+			float pZ
+	) {
+		if (vertexCount != 0L) {
+			builder.addVertex();
+		}
+
+		vertexCount ++;
+		vertexAddress = buffer.reserve((int) vertexSize);
+
+		posOffset.putFloat(vertexAddress + 0L, pX);
+		posOffset.putFloat(vertexAddress + 4L, pY);
+		posOffset.putFloat(vertexAddress + 8L, pZ);
+
+		builder.setPosition(
+				pX,
+				pY,
+				pZ
+		);
+
+		return this;
+	}
+
+	@Override
+	public VertexConsumer setColor(
+			int pRed,
+			int pGreen,
+			int pBlue,
+			int pAlpha
+	) {
+		if (vertexAddress == -1) {
+			throw new IllegalStateException("Vertex not building!");
+		}
+
+		colorOffset.putByte(vertexAddress + 0L, (byte) pRed);
+		colorOffset.putByte(vertexAddress + 1L, (byte) pGreen);
+		colorOffset.putByte(vertexAddress + 2L, (byte) pBlue);
+		colorOffset.putByte(vertexAddress + 3L, (byte) pAlpha);
+
+		builder.setColor(
+				pRed,
+				pGreen,
+				pBlue,
+				pAlpha
+		);
+
+		return this;
+	}
+
+	@Override
+	public VertexConsumer setUv(float pU, float pV) {
+		if (vertexAddress == -1) {
+			throw new IllegalStateException("Vertex not building!");
+		}
+
+		uv0Offset.putFloat(vertexAddress + 0L, pU);
+		uv0Offset.putFloat(vertexAddress + 4L, pV);
+
+		builder.setUv(pU, pV);
+
+		return this;
+	}
+
+	@Override
+	public VertexConsumer setUv1(int pU, int pV) {
+		return this;
+	}
+
+	@Override
+	public VertexConsumer setUv2(int pU, int pV) {
+		if (vertexAddress == -1) {
+			throw new IllegalStateException("Vertex not building!");
+		}
+
+		uv2Offset.putShort(vertexAddress + 0L, (short) pU);
+		uv2Offset.putShort(vertexAddress + 2L, (short) pV);
+
+		builder.setUv2(pU, pV);
+
+		return this;
+	}
+
+	@Override
+	public VertexConsumer setNormal(
+			float pNormalX,
+			float pNormalY,
+			float pNormalZ
+	) {
+		if (vertexAddress == -1) {
+			throw new IllegalStateException("Vertex not building!");
+		}
+
+		normalOffset.putNormal(vertexAddress + 0L, pNormalX);
+		normalOffset.putNormal(vertexAddress + 1L, pNormalY);
+		normalOffset.putNormal(vertexAddress + 2L, pNormalZ);
+
+		builder.setNormal(
+				pNormalX,
+				pNormalY,
+				pNormalZ
+		);
+
+		return this;
+	}
+
+	@Override
+	public void addVertex(
+			float	pX,
+			float	pY,
+			float	pZ,
+			int		pColor,
+			float	pU,
+			float	pV,
+			int		pPackedOverlay,
+			int		pPackedLight,
+			float	pNormalX,
+			float	pNormalY,
+			float	pNormalZ
+	) {
+		vertexCount ++;
+		vertexAddress = buffer.reserve((int) vertexSize);
+
+		posOffset	.putFloat	(vertexAddress + 0L,	pX);
+		posOffset	.putFloat	(vertexAddress + 4L,	pY);
+		posOffset	.putFloat	(vertexAddress + 8L,	pZ);
+		colorOffset	.putInt		(vertexAddress,			FastColorCompat.ABGR32.fromArgb32(pColor));
+		uv0Offset	.putFloat	(vertexAddress + 0L,	pU);
+		uv0Offset	.putFloat	(vertexAddress + 4L,	pV);
+		uv2Offset	.putInt		(vertexAddress,			pPackedLight);
+		normalOffset.putNormal	(vertexAddress + 0L,	pNormalX);
+		normalOffset.putNormal	(vertexAddress + 1L,	pNormalY);
+		normalOffset.putNormal	(vertexAddress + 2L,	pNormalZ);
+
+		builder.addVertex(
+				pX,
+				pY,
+				pZ,
+				pU,
+				pV,
+				FastColorCompat.ARGB32.red	(pColor),
+				FastColorCompat.ARGB32.green	(pColor),
+				FastColorCompat.ARGB32.blue	(pColor),
+				FastColorCompat.ARGB32.alpha	(pColor),
+				PackedVector2i	.unpackU(pPackedLight),
+				PackedVector2i	.unpackV(pPackedLight),
+				pNormalX,
+				pNormalY,
+				pNormalZ
+		);
+	}
+
+	@Override
+	public MeshData getData() {
+		if (meshData == null) {
+			meshData = builder.build();
+		}
+
+		return meshData;
+	}
+}

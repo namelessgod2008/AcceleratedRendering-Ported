@@ -1,0 +1,97 @@
+#version 460 core
+
+struct Vertex {
+    float   x;
+    float   y;
+    float   z;
+    uint    color;
+    float   u0;
+    float   v0;
+    int     uv1;
+    int     uv2;
+    uint    normal;
+    uint    iris_entity_0;
+    uint    iris_entity_1;
+    float   iris_midcoord_u;
+    float   iris_midcoord_v;
+    uint    iris_at_tangent;
+};
+
+layout(local_size_x = 128) in;
+
+layout(binding=1, std430) restrict buffer Vertices {
+    Vertex vertices[];
+};
+
+layout(location=0) uniform uint polygonCount;
+layout(location=1) uniform uint vertexOffset;
+
+uint computeTangentSmooth(vec3 pos1, vec3 pos2, vec3 pos3, vec2 uv1, vec2 uv2, vec2 uv3, vec3 normal);
+
+void main() {
+    uint    index       = gl_GlobalInvocationID.x;
+    uint    base        = index * 3u;
+
+    if (index >= polygonCount) {
+        return;
+    }
+
+    uint    index1      = vertexOffset + base + 0u;
+    uint    index2      = vertexOffset + base + 1u;
+    uint    index3      = vertexOffset + base + 2u;
+
+    Vertex  vertex1     = vertices[index1];
+    Vertex  vertex2     = vertices[index2];
+    Vertex  vertex3     = vertices[index3];
+
+    vec3    pos1        = vec3(vertex1.x, vertex1.y, vertex1.z);
+    vec3    pos2        = vec3(vertex2.x, vertex2.y, vertex2.z);
+    vec3    pos3        = vec3(vertex3.x, vertex3.y, vertex3.z);
+
+    vec2    uv1         = vec2(vertex1.u0, vertex1.v0);
+    vec2    uv2         = vec2(vertex2.u0, vertex2.v0);
+    vec2    uv3         = vec2(vertex3.u0, vertex3.v0);
+    vec2    midUV       = (uv1 + uv2 + uv3) / 3;
+
+    vec3    normal1     = unpackSnorm4x8(vertex1.normal).xyz;
+    vec3    normal2     = unpackSnorm4x8(vertex2.normal).xyz;
+    vec3    normal3     = unpackSnorm4x8(vertex3.normal).xyz;
+
+    vertices[index1].iris_at_tangent = computeTangentSmooth(pos1, pos2, pos3, uv1, uv2, uv3, normal1);
+    vertices[index2].iris_at_tangent = computeTangentSmooth(pos1, pos2, pos3, uv1, uv2, uv3, normal2);
+    vertices[index3].iris_at_tangent = computeTangentSmooth(pos1, pos2, pos3, uv1, uv2, uv3, normal3);
+
+    vertices[index1].iris_midcoord_u = midUV.x;
+    vertices[index2].iris_midcoord_u = midUV.x;
+    vertices[index3].iris_midcoord_u = midUV.x;
+
+    vertices[index1].iris_midcoord_v = midUV.y;
+    vertices[index2].iris_midcoord_v = midUV.y;
+    vertices[index3].iris_midcoord_v = midUV.y;
+}
+
+uint computeTangentSmooth(vec3 pos1, vec3 pos2, vec3 pos3, vec2 uv1, vec2 uv2, vec2 uv3, vec3 normal) {
+    float dot1          =   dot(pos1, normal);
+    float dot2          =   dot(pos2, normal);
+    float dot3          =   dot(pos3, normal);
+
+    pos1                -=  dot1 * normal;
+    pos2                -=  dot2 * normal;
+    pos3                -=  dot3 * normal;
+
+    vec3 edge1          =   pos2 - pos1;
+    vec3 edge2          =   pos3 - pos1;
+
+    vec2 dUV1           =   uv2 - uv1;
+    vec2 dUV2           =   uv3 - uv1;
+
+    float fdenom        =   dUV1.x * dUV2.y - dUV2.x * dUV1.y;
+    float f             =   fdenom == 0.0 ? 1.0 : 1.0 / fdenom;
+
+    vec3 tangent        =   normalize   (f * (dUV2.y * edge1 - dUV1.y * edge2));
+    vec3 aBitangent     =   normalize   (f * (-dUV2.x * edge1 + dUV1.x * edge2));
+    vec3 pBitangent     =   cross       (tangent, normal);
+    vec4 tangent4       =   vec4        (tangent, dot(aBitangent, pBitangent) < 0.0 ? -1.0 : 1.0);
+
+    return packSnorm4x8(tangent4);
+}

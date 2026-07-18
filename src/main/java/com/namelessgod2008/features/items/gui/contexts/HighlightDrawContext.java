@@ -1,0 +1,25 @@
+package com.namelessgod2008.features.items.gui.contexts;
+
+import com.namelessgod2008.features.items.gui.GuiBatchingController;
+import org.joml.Matrix3f;
+import org.joml.Matrix4f;
+
+public record HighlightDrawContext(
+		Matrix4f	transform,
+		Matrix3f	normal,
+		int			highlightX,
+		int			highlightY,
+		int			blitOffset,
+		int			color
+) implements IGuiElementContext {
+
+	@Override
+	public float depth() {
+		return blitOffset;
+	}
+
+	@Override
+	public float thickness() {
+		return GuiBatchingController.DELTA;
+	}
+}

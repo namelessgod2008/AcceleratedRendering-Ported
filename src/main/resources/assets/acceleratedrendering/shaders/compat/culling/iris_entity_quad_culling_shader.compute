@@ -1,0 +1,104 @@
+#version 460 core
+
+struct Vertex {
+    float   x;
+    float   y;
+    float   z;
+    uint    color;
+    float   u0;
+    float   v0;
+    int     uv1;
+    int     uv2;
+    uint    normal;
+    uint    iris_data_0;
+    uint    iris_data_1;
+    uint    iris_data_2;
+    uint    iris_data_3;
+    uint    iris_data_4;
+};
+
+struct VaryingData {
+    int     offset;
+    int     sharing;
+    int     mesh;
+    int     shouldCull;
+};
+
+struct SharingData {
+    mat4    transform;
+    mat3    normal;
+};
+
+struct Polygon {
+    uint    vertex1;
+    uint    vertex2;
+    uint    vertex3;
+};
+
+layout(local_size_x = 128) in;
+
+layout(binding=1, std430) restrict readonly buffer Vertices {
+    Vertex vertices[];
+};
+
+layout(binding=2, std430) restrict readonly buffer Sharings {
+    SharingData sharings[];
+};
+
+layout(binding=4, std430) restrict readonly buffer Varyings {
+    VaryingData varyings[];
+};
+
+layout(binding=6, std430) restrict writeonly buffer PolygonsOut {
+    Polygon polygonsOut[];
+};
+
+layout(binding=0, offset=0) uniform atomic_uint indexCounter;
+
+layout(location=0) uniform mat4 viewMatrix;
+layout(location=1) uniform mat4 projectMatrix;
+layout(location=2) uniform uint polygonCount;
+layout(location=3) uniform uint vertexOffset;
+layout(location=4) uniform uint varyingOffset;
+
+void main() {
+    uint    index   = gl_GlobalInvocationID.x;
+    uint    base    = index * 4u;
+
+    if (index >= polygonCount) {
+        return;
+    }
+
+    uint    index0      = varyingOffset + base + 0u;
+    uint    index1      = vertexOffset  + base + 0u;
+    uint    index2      = vertexOffset  + base + 1u;
+    uint    index3      = vertexOffset  + base + 2u;
+    uint    index4      = vertexOffset  + base + 3u;
+    uint    shouldCull  = varyings[index0 - varyings[index0].offset].shouldCull;
+
+    Vertex  vertex1 = vertices[index1];
+    Vertex  vertex2 = vertices[index2];
+    Vertex  vertex3 = vertices[index3];
+    Vertex  vertex4 = vertices[index4];
+
+    mat4    matrix  = projectMatrix * viewMatrix;
+    vec4    pos1    = matrix        * vec4(vertex1.x, vertex1.y, vertex1.z, 1.0);
+    vec4    pos2    = matrix        * vec4(vertex2.x, vertex2.y, vertex2.z, 1.0);
+    vec4    pos3    = matrix        * vec4(vertex3.x, vertex3.y, vertex3.z, 1.0);
+    vec4    pos4    = matrix        * vec4(vertex4.x, vertex4.y, vertex4.z, 1.0);
+
+    float   det1    = determinant(mat3(pos1.xyw, pos2.xyw, pos3.xyw));
+    float   det2    = determinant(mat3(pos3.xyw, pos4.xyw, pos1.xyw));
+
+    if (shouldCull == 0u || det1 > 0.0 || det2 > 0.0) {
+        uint indexOut                       = atomicCounterAdd(indexCounter, 6u) / 3u;
+
+        polygonsOut[indexOut + 0].vertex1   = index1;
+        polygonsOut[indexOut + 0].vertex2   = index2;
+        polygonsOut[indexOut + 0].vertex3   = index3;
+
+        polygonsOut[indexOut + 1].vertex1   = index3;
+        polygonsOut[indexOut + 1].vertex2   = index4;
+        polygonsOut[indexOut + 1].vertex3   = index1;
+    }
+}

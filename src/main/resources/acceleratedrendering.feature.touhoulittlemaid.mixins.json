@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "refmap": "acceleratedrendering-refmap.json",
+  "minVersion": "0.8",
+  "package": "com.namelessgod2008.features.tlm.mixins",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "GeoBoneMixin",
+    "IGeoRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

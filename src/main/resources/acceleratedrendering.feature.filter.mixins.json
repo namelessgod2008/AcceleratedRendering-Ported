@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "refmap": "acceleratedrendering-refmap.json",
+  "minVersion": "0.8",
+  "package": "com.namelessgod2008.features.filter.mixins",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "AbstractContainerScreenMixin",
+    "BlockEntityRenderDispatcherMixin",
+    "ItemRendererMixin",
+    "LevelRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

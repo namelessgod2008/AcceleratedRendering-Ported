@@ -1,0 +1,472 @@
+package com.namelessgod2008.core.buffers.accelerated.builders;
+
+import com.namelessgod2008.core.CoreFeature;
+import com.namelessgod2008.core.buffers.accelerated.AcceleratedRingBuffers;
+import com.namelessgod2008.core.buffers.accelerated.draw.pools.IElementPool;
+import com.namelessgod2008.core.buffers.accelerated.layers.LayerKey;
+import com.namelessgod2008.core.buffers.accelerated.layers.functions.ILayerFunction;
+import com.namelessgod2008.core.buffers.accelerated.pools.StagingBufferPool;
+import com.namelessgod2008.core.buffers.accelerated.pools.meshes.MeshUploaderPool;
+import com.namelessgod2008.core.buffers.accelerated.renderers.IAcceleratedRenderer;
+import com.namelessgod2008.core.buffers.memory.*;
+import com.namelessgod2008.core.meshes.ServerMesh;
+import com.namelessgod2008.core.programs.culling.ICullingProgramDispatcher;
+import com.namelessgod2008.core.programs.dispatchers.IPolygonProgramDispatcher;
+import com.namelessgod2008.core.programs.overrides.ProgramOverride;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.blaze3d.vertex.VertexFormatElement;
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import net.minecraft.client.renderer.RenderType;
+import com.namelessgod2008.core.utils.FastColorCompat;
+import org.joml.Matrix3f;
+import org.joml.Matrix4f;
+import org.lwjgl.system.MemoryUtil;
+
+import java.nio.ByteBuffer;
+import java.util.function.LongSupplier;
+
+@EqualsAndHashCode(onlyExplicitlyIncluded = true, cacheStrategy = EqualsAndHashCode.CacheStrategy.LAZY)
+public class AcceleratedBufferBuilder implements IAcceleratedVertexConsumer, VertexConsumer, LongSupplier {
+
+	public static								final	long											SHARING_SIZE		= 4L * 4L * 4L + 4L * 3L * 4L;
+	public static								final	IMemoryInterface								SHARING_TRANSFORM	= new SimpleMemoryInterface(0L,				SHARING_SIZE);
+	public static								final	IMemoryInterface								SHARING_NORMAL		= new SimpleMemoryInterface(4L * 4L * 4L,	SHARING_SIZE);
+
+	@Getter public								final	IMemoryInterface								varyingOffset;
+	@Getter public								final	IMemoryInterface								varyingSharing;
+	@Getter public								final	IMemoryInterface								varyingMesh;
+	@Getter public								final	IMemoryInterface								varyingShouldCull;
+
+	@Getter private								final	Int2ObjectMap<MeshUploaderPool.MeshUploader>	meshUploaders;
+	@Getter private								final	StagingBufferPool		.StagingBuffer			vertexBuffer;
+	@Getter private								final	StagingBufferPool		.StagingBuffer			varyingBuffer;
+	@Getter private								final	IElementPool			.IElementSegment		elementSegment;
+	@Getter private								final	AcceleratedRingBuffers	.Buffers				buffer;
+	@Getter private								final	ILayerFunction									function;
+	@Getter private								final	int												index;
+
+	@EqualsAndHashCode.Include private			final	RenderType										renderType;
+	@Getter @EqualsAndHashCode.Include private	final	VertexLayout									layout;
+	@Getter private								final	LayerKey										layerKey;
+	@Getter private								final	IPolygonProgramDispatcher						polygonProgramDispatcher;
+	@Getter private								final	ICullingProgramDispatcher						cullingProgramDispatcher;
+	@Getter private								final	ProgramOverride									programOverride;
+	@Getter private								final	VertexFormat.Mode								mode;
+	@Getter private								final	int												polygonSize;
+	@Getter private								final	int												polygonElementCount;
+	@Getter private								final	long											vertexSize;
+
+	private										final	IMemoryInterface								posOffset;
+	@Getter private								final	IMemoryInterface								colorOffset;
+	private										final	IMemoryInterface								uv0Offset;
+	@Getter private								final	IMemoryInterface								uv1Offset;
+	@Getter private								final	IMemoryInterface								uv2Offset;
+	private										final	IMemoryInterface								normalOffset;
+
+	private												int												elementCount;
+	@Getter private										int												meshVertexCount;
+	@Getter private										int												vertexCount;
+	private												long											vertexAddress;
+	private												long											sharingAddress;
+	private												int												activeSharing;
+	@Getter private		 								boolean											outdated;
+
+	public AcceleratedBufferBuilder(
+			StagingBufferPool		.StagingBuffer		vertexBuffer,
+			StagingBufferPool		.StagingBuffer		varyingBuffer,
+			IElementPool			.IElementSegment	elementSegment,
+			AcceleratedRingBuffers	.Buffers			buffer,
+			ILayerFunction								layerFunction,
+			LayerKey									layerKey
+	) {
+		var environment					= buffer.getEnvironment();
+
+		this.varyingOffset				= new SimpleDynamicMemoryInterface(0L * 4L, this);
+		this.varyingSharing				= new SimpleDynamicMemoryInterface(1L * 4L, this);
+		this.varyingMesh				= new SimpleDynamicMemoryInterface(2L * 4L, this);
+		this.varyingShouldCull			= new SimpleDynamicMemoryInterface(3L * 4L, this);
+
+		this.meshUploaders				= new Int2ObjectOpenHashMap<>();
+		this.index						= vertexBuffer.getIndex();
+		this.vertexBuffer				= vertexBuffer;
+		this.varyingBuffer				= varyingBuffer;
+		this.elementSegment				= elementSegment;
+		this.buffer						= buffer;
+		this.function					= layerFunction;
+
+		this.layerKey					= layerKey;
+		this.renderType					= layerKey		.renderType							();
+		this.layout						= environment	.getLayout							();
+		this.polygonProgramDispatcher	= environment	.selectProcessingProgramDispatcher	(this.renderType.mode);
+		this.cullingProgramDispatcher	= environment	.selectCullingProgramDispatcher		(this.renderType);
+		this.programOverride			= environment	.getProgramOverride					(this.renderType);
+
+		this.mode						= this.renderType	.mode;
+		this.polygonSize				= this.mode			.primitiveLength;
+		this.polygonElementCount		= this.mode			.indexCount		(this.polygonSize);
+		this.vertexSize					= this.buffer		.getVertexSize	();
+
+		this.posOffset					= this.layout.getElement(VertexFormatElement.POSITION);
+		this.colorOffset				= this.layout.getElement(VertexFormatElement.COLOR);
+		this.uv0Offset					= this.layout.getElement(VertexFormatElement.UV0);
+		this.uv1Offset					= this.layout.getElement(VertexFormatElement.UV1);
+		this.uv2Offset					= this.layout.getElement(VertexFormatElement.UV2);
+		this.normalOffset				= this.layout.getElement(VertexFormatElement.NORMAL);
+
+		this.elementCount				= 0;
+		this.meshVertexCount			= 0;
+		this.vertexCount				= 0;
+		this.vertexAddress				= -1;
+		this.sharingAddress				= -1;
+		this.activeSharing				= -1;
+	}
+
+	@Override
+	public VertexConsumer addVertex(
+			PoseStack.Pose	pPose,
+			float			pX,
+			float			pY,
+			float			pZ
+	) {
+		beginTransform(
+				pPose.pose	(),
+				pPose.normal()
+		);
+
+		return addVertex(
+				pX,
+				pY,
+				pZ
+		);
+	}
+
+	@Override
+	public VertexConsumer addVertex(
+			float pX,
+			float pY,
+			float pZ
+	) {
+		var vertexAddress	= vertexBuffer	.reserve(getVertexSize	());
+		var varyingAddress	= varyingBuffer	.reserve(getVaryingSize	());
+
+		this.vertexAddress	= vertexAddress;
+
+		posOffset.putFloat(vertexAddress + 0L, pX);
+		posOffset.putFloat(vertexAddress + 4L, pY);
+		posOffset.putFloat(vertexAddress + 8L, pZ);
+
+		varyingOffset		.putInt			(varyingAddress, 0);
+		varyingSharing		.putInt			(varyingAddress, activeSharing);
+		varyingMesh			.putInt			(varyingAddress, -1);
+		varyingShouldCull	.putInt			(varyingAddress, cullingProgramDispatcher.shouldCull() ? 1 : 0);
+		programOverride		.uploadVarying	(varyingAddress, 0);
+
+		vertexCount		++;
+		elementCount	++;
+
+		if (elementCount >= polygonSize) {
+			elementCount	= 0;
+			activeSharing	= -1;
+
+			elementSegment.count(polygonElementCount);
+		}
+
+		return this;
+	}
+
+	@Override
+	public VertexConsumer setColor(
+			int pRed,
+			int pGreen,
+			int pBlue,
+			int pAlpha
+	) {
+		if (vertexAddress == -1) {
+			throw new IllegalStateException("Vertex not building!");
+		}
+
+		colorOffset.putByte(vertexAddress + 0L, (byte) pRed);
+		colorOffset.putByte(vertexAddress + 1L, (byte) pGreen);
+		colorOffset.putByte(vertexAddress + 2L, (byte) pBlue);
+		colorOffset.putByte(vertexAddress + 3L, (byte) pAlpha);
+
+		return this;
+	}
+
+	@Override
+	public VertexConsumer setUv(float pU, float pV) {
+		if (vertexAddress == -1) {
+			throw new IllegalStateException("Vertex not building!");
+		}
+
+		uv0Offset.putFloat(vertexAddress + 0L, pU);
+		uv0Offset.putFloat(vertexAddress + 4L, pV);
+
+		return this;
+	}
+
+	@Override
+	public VertexConsumer setUv1(int pU, int pV) {
+		if (vertexAddress == -1) {
+			throw new IllegalStateException("Vertex not building!");
+		}
+
+		uv1Offset.putShort(vertexAddress + 0L, (short) pU);
+		uv1Offset.putShort(vertexAddress + 2L, (short) pV);
+
+		return this;
+	}
+
+	@Override
+	public VertexConsumer setUv2(int pU, int pV) {
+		if (vertexAddress == -1) {
+			throw new IllegalStateException("Vertex not building!");
+		}
+
+		uv2Offset.putShort(vertexAddress + 0L, (short) pU);
+		uv2Offset.putShort(vertexAddress + 2L, (short) pV);
+
+		return this;
+	}
+
+	@Override
+	public VertexConsumer setNormal(
+			PoseStack.Pose	pPose,
+			float			pNormalX,
+			float			pNormalY,
+			float			pNormalZ
+	) {
+		if (activeSharing == -1) {
+			return VertexConsumer.super.setNormal(
+					pPose,
+					pNormalX,
+					pNormalY,
+					pNormalZ
+			);
+		}
+
+		return setNormal(
+				pNormalX,
+				pNormalY,
+				pNormalZ
+		);
+	}
+
+	@Override
+	public VertexConsumer setNormal(
+			float pNormalX,
+			float pNormalY,
+			float pNormalZ
+	) {
+		if (vertexAddress == -1) {
+			throw new IllegalStateException("Vertex not building!");
+		}
+
+		normalOffset.putNormal(vertexAddress + 0L, pNormalX);
+		normalOffset.putNormal(vertexAddress + 1L, pNormalY);
+		normalOffset.putNormal(vertexAddress + 2L, pNormalZ);
+
+		return this;
+	}
+
+	@Override
+	public void addVertex(
+			float	pX,
+			float	pY,
+			float	pZ,
+			int		pColor,
+			float	pU,
+			float	pV,
+			int		pPackedOverlay,
+			int		pPackedLight,
+			float	pNormalX,
+			float	pNormalY,
+			float	pNormalZ
+	) {
+		var vertexAddress	= vertexBuffer	.reserve(getVertexSize	());
+		var varyingAddress	= varyingBuffer	.reserve(getVaryingSize	());
+
+		posOffset	.putFloat	(vertexAddress + 0L,	pX);
+		posOffset	.putFloat	(vertexAddress + 4L,	pY);
+		posOffset	.putFloat	(vertexAddress + 8L,	pZ);
+		colorOffset	.putInt		(vertexAddress,			FastColorCompat.ABGR32.fromArgb32(pColor));
+		uv0Offset	.putFloat	(vertexAddress + 0L,	pU);
+		uv0Offset	.putFloat	(vertexAddress + 4L,	pV);
+		uv1Offset	.putInt		(vertexAddress,			pPackedOverlay);
+		uv2Offset	.putInt		(vertexAddress,			pPackedLight);
+		normalOffset.putNormal	(vertexAddress + 0L,	pNormalX);
+		normalOffset.putNormal	(vertexAddress + 1L,	pNormalY);
+		normalOffset.putNormal	(vertexAddress + 2L,	pNormalZ);
+
+		varyingOffset		.putInt			(varyingAddress, 0);
+		varyingSharing		.putInt			(varyingAddress, activeSharing);
+		varyingMesh			.putInt			(varyingAddress, -1);
+		varyingShouldCull	.putInt			(varyingAddress, cullingProgramDispatcher.shouldCull() ? 1 : 0);
+		programOverride		.uploadVarying	(varyingAddress, 0);
+
+		vertexCount		++;
+		elementCount	++;
+
+		if (elementCount >= polygonSize) {
+			elementCount	= 0;
+			activeSharing	= -1;
+
+			elementSegment.count(polygonElementCount);
+		}
+	}
+
+	@Override
+	public void beginTransform(Matrix4f transform, Matrix3f normal) {
+		sharingAddress	= buffer.reserveSharing	();
+		activeSharing	= buffer.getSharing		();
+
+		SHARING_TRANSFORM	.putMatrix4f(sharingAddress, transform);
+		SHARING_NORMAL		.putMatrix3f(sharingAddress, normal);
+	}
+
+	@Override
+	public void endTransform() {
+		sharingAddress	= -1;
+		activeSharing	= -1;
+	}
+
+	@Override
+	public void addClientMesh(
+			ByteBuffer	meshBuffer,
+			int			size,
+			int			color,
+			int			light,
+			int			overlay
+	) {
+		var bufferSize		= vertexSize * size;
+		var vertexAddress	= vertexBuffer	.reserve(bufferSize);
+		var varyingAddress	= varyingBuffer	.reserve(getVaryingSize() * size);
+
+		MemoryUtil.memCopy(
+				MemoryUtil.memAddress0(meshBuffer),
+				vertexAddress,
+				bufferSize
+		);
+
+		colorOffset	.putInt(vertexAddress, FastColorCompat.ABGR32.fromArgb32(color));
+		uv1Offset	.putInt(vertexAddress, overlay);
+		uv2Offset	.putInt(vertexAddress, light);
+
+		varyingSharing		.putInt			(varyingAddress, activeSharing);
+		varyingMesh			.putInt			(varyingAddress, -1);
+		varyingShouldCull	.putInt			(varyingAddress, cullingProgramDispatcher.shouldCull() ? 1 : 0);
+		programOverride		.uploadVarying	(varyingAddress, 0);
+
+		for (var index = 0; index < size; index ++) {
+			varyingOffset.putIntAt(
+					varyingAddress,
+					index,
+					index
+			);
+		}
+
+		elementSegment.count(mode.indexCount(size));
+		vertexCount += size;
+	}
+
+	@Override
+	public void addServerMesh(
+			ServerMesh	mesh,
+			int			color,
+			int			light,
+			int			overlay
+	) {
+		var meshId			= mesh			.meshId	();
+		var meshSize		= mesh			.size	();
+		var meshUploader	= meshUploaders	.get	(meshId);
+
+		if (meshUploader == null) {
+			meshUploader = buffer	.getMeshUploader();
+			meshUploader			.setIndex		(index);
+			meshUploader			.setOverride	(programOverride);
+			meshUploader			.setServerMesh	(mesh);
+			meshUploaders			.put			(meshId, meshUploader);
+		}
+
+		elementSegment.count(mode.indexCount(meshSize));
+		meshVertexCount += meshSize;
+
+		meshUploader.addUpload(
+				color,
+				light,
+				overlay,
+				activeSharing,
+				cullingProgramDispatcher.shouldCull() ? 1 : 0
+		);
+	}
+
+	@Override
+	public <T> void doRender(
+			IAcceleratedRenderer<T>	renderer,
+			T						context,
+			Matrix4f				transform,
+			Matrix3f				normal,
+			int						light,
+			int						overlay,
+			int						color
+	) {
+		renderer.render(
+				this,
+				context,
+				transform,
+				normal,
+				light,
+				overlay,
+				color
+		);
+	}
+
+	@Override
+	public VertexConsumer decorate(VertexConsumer buffer) {
+		return buffer;
+	}
+
+	@Override
+	public boolean isAccelerated() {
+		return true;
+	}
+
+	@Override
+	public RenderType getRenderType() {
+		return renderType;
+	}
+
+	@Override
+	public long getAsLong() {
+		return getVaryingSize();
+	}
+
+	public long getVaryingSize() {
+		return programOverride.getVaryingSize();
+	}
+
+	public long getVertexCountOffset() {
+		return vertexBuffer.getOffset() / getVertexSize();
+	}
+
+	public long getVaryingCountOffset() {
+		return varyingBuffer.getOffset() / getVaryingSize();
+	}
+
+	public int getTotalVertexCount() {
+		return vertexCount + meshVertexCount;
+	}
+
+	public boolean isEmpty() {
+		return getTotalVertexCount() == 0;
+	}
+
+	public void setOutdated() {
+		outdated = true;
+	}
+}

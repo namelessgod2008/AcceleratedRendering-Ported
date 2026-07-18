@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "refmap": "acceleratedrendering-refmap.json",
+  "minVersion": "0.8",
+  "package": "com.namelessgod2008.features.ftb.mixins",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "BaseScreenMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,39 @@
+package com.namelessgod2008.compat.iris.mixins.iris;
+
+import net.irisshaders.iris.vertices.sodium.ModelToEntityVertexSerializer;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Pseudo;
+import org.spongepowered.asm.mixin.injection.Constant;
+import org.spongepowered.asm.mixin.injection.ModifyConstant;
+
+@Pseudo
+@Mixin(value = ModelToEntityVertexSerializer.class, remap = false)
+public class ModelToEntityVertexSerializerMixin {
+
+	@ModifyConstant(
+			method		= "serialize",
+			constant	= @Constant(longValue = 42L),
+			require		= 0
+	)
+	public long modifyMidU(long constant) {
+		return 44L;
+	}
+
+	@ModifyConstant(
+			method		= "serialize",
+			constant	= @Constant(longValue = 46L),
+			require		= 0
+	)
+	public long modifyMidV(long constant) {
+		return 48L;
+	}
+
+	@ModifyConstant(
+			method		= "serialize",
+			constant	= @Constant(longValue = 50L),
+			require		= 0
+	)
+	public long modifyTangent(long constant) {
+		return 52L;
+	}
+}
