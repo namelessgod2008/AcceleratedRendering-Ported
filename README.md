@@ -30,31 +30,26 @@
 | 实体阴影加速 | 加速方块阴影渲染 |
 | 物品加速 (世界) | 掉落物、手持物品加速渲染 |
 | 方块加速 | 方块模型渲染加速 (含着色) |
-| 文本加速 | `BakedGlyph`/`Font` 加速渲染 (参数语义 + 描述符修复) |
+| 文本加速 | `BakedGlyph`/`Font`/`StringRenderOutput` 加速渲染；告示牌文字已修复（2026-07-18: `endLastBatch` ordinal + `FastColorCompat` sign + 11 参构造注入） |
 | 模型加速 | Multipart、Weighted、SimpleBakedModel (1.21.4 API 适配) |
 | 核心管线 | 缓冲区管理、LevelRenderer 帧图钩子、wrapper 链 |
 | 实体/方块实体/容器过滤 | FilterFeature — 可选禁用特定类型加速 |
 | Vanilla 渲染层修复 | `LivingEntityRenderer` 渲染状态 API + `HumanoidArmorLayer` 装备渲染 |
 | 物品栏实体渲染 | `InventoryScreen` entity rendering (method_64045) |
 | GUI 批处理 (fill/blit/slot) | 容器界面填充/位块传输/槽位批处理，热键栏物品批处理 |
-| GUI 物品批处理 | `ItemStackRenderState.render()` + `ItemModelResolver.updateForTopItem()` |
-| GUI 字体/字符串批处理 | `gui.FontMixin` — `context.drawString()` → `font.drawInBatch()` |
-| GUI 槽位高亮批处理 | `@WrapOperation` on `blitSprite` → `submitBlit()` with renderTypeGetter |
-| StringRenderOutput | 1.21.4 packed color / drawShadow / finish(float) |
-| Iris 兼容 | `vanilla.LevelRendererMixin`→`method_62214` |
+| GUI 物品/字体/高亮批处理 | `ItemStackRenderState` + `font.drawInBatch` + `submitBlit` with renderTypeGetter |
 | ModernUI 兼容 | ModernUI 3.12.0.3 适配（**编译依赖必须与运行时匹配**） |
-| Mixin 重映射 | `fabric-loom-remap` 静态重映射注解为 intermediary（refMap 机制已废弃，JSON 中 refmap 条目为无害残留） |
-| 告示牌文字加速修复 | `LevelRenderer` ordinal 修正 + `FastColorCompat` sign 修复 + `StringRenderOutput` 11 参构造注入（2026-07-18） |
+| Mixin 重映射 | `fabric-loom-remap` 静态重映射注解为 intermediary（refMap 已废弃） |
+| Xaero 兼容 | `compat/xaero/` — Tweakeroo 灵魂出窍 NPE 防御（2026-07-18） |
 
-### ⚠️ 部分实现
+### ⚠️ 部分实现 / 待验证
 
 | 功能 | 状态 |
 |------|------|
-| 手部物品加速 | ❌ 不可行 — 坐标空间不匹配 (见 CLAUDE.md #4b) |
-| Iris 兼容 | 🟡 需运行时验证 |
+| 手部物品加速 | ❌ 不可行 — 坐标空间不匹配（见 CLAUDE.md #4b） |
+| Iris 兼容 | ✅ 注入点已验证（method_62214），🟡 需运行时验证 |
 | ImmediatelyFast 兼容 | ⚠️ @Pseudo — 未验证 |
-| Xaero's Minimap/WorldMap 兼容 | ✅ `compat/xaero/` — Tweakeroo 灵魂出窍 NPE 防御（2026-07-18） |
-| 其他 mod 兼容 | ⚠️ Create, EMF, Geckolib, TLM, FTB, Trinkets, Tweakmore, Sophisticated |
+| 其他 mod 兼容 | ⚠️ Create, EMF, Geckolib, TLM, FTB, Trinkets, Tweakmore, Sophisticated（compat JSON 在 resources 但未注册） |
 
 详细信息参见 [`TODO.md`](TODO.md)。
 
