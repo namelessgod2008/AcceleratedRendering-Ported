@@ -44,6 +44,7 @@
 | Iris 兼容 | `vanilla.LevelRendererMixin`→`method_62214` |
 | ModernUI 兼容 | ModernUI 3.12.0.3 适配（**编译依赖必须与运行时匹配**） |
 | Mixin 重映射 | `fabric-loom-remap` 静态重映射注解为 intermediary（refMap 机制已废弃，JSON 中 refmap 条目为无害残留） |
+| 告示牌文字加速修复 | `LevelRenderer` ordinal 修正 + `FastColorCompat` sign 修复 + `StringRenderOutput` 11 参构造注入（2026-07-18） |
 
 ### ⚠️ 部分实现
 
@@ -52,6 +53,7 @@
 | 手部物品加速 | ❌ 不可行 — 坐标空间不匹配 (见 CLAUDE.md #4b) |
 | Iris 兼容 | 🟡 需运行时验证 |
 | ImmediatelyFast 兼容 | ⚠️ @Pseudo — 未验证 |
+| Xaero's Minimap/WorldMap 兼容 | ✅ `compat/xaero/` — Tweakeroo 灵魂出窍 NPE 防御（2026-07-18） |
 | 其他 mod 兼容 | ⚠️ Create, EMF, Geckolib, TLM, FTB, Trinkets, Tweakmore, Sophisticated |
 
 详细信息参见 [`TODO.md`](TODO.md)。

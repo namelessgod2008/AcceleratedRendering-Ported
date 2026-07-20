@@ -2,16 +2,17 @@ package com.namelessgod2008.core.utils;
 
 /**
  * Compatibility layer for {@code net.minecraft.util.FastColor} which was removed in Minecraft 1.21.4.
- * Delegates to {@code net.minecraft.util.ARGB} with correct parameter ordering.
+ * Delegates to {@code net.minecraft.util.ARGB}.
  * <p>
- * IMPORTANT: {@code ARGB.color(a, r, g, b)} takes alpha FIRST, unlike
- * {@code FastColor.ARGB32.color(r, g, b, a)} which took alpha LAST.
+ * IMPORTANT: 上游 {@code FastColor.ARGB32.color(alpha, red, green, blue)} 与 1.21.4 的
+ * {@code ARGB.color(alpha, red, green, blue)} 参数顺序相同 — 都是 alpha FIRST。
+ * 本类 4 参签名必须保持 alpha FIRST：全项目 9 处调用点均为上游移植代码，全部按 (alpha, r, g, b) 传参。
  */
 public class FastColorCompat {
 
     public static final class ARGB32 {
-        /** ARGB.color(alpha, red, green, blue) — alpha first in 1.21.4 */
-        public static int color(int red, int green, int blue, int alpha) {
+        /** 与上游 FastColor.ARGB32.color 一致：alpha FIRST */
+        public static int color(int alpha, int red, int green, int blue) {
             return net.minecraft.util.ARGB.color(alpha, red, green, blue);
         }
 
@@ -44,7 +45,8 @@ public class FastColorCompat {
             );
         }
 
-        public static int colorFromFloat(float red, float green, float blue, float alpha) {
+        /** 与上游 FastColor.ARGB32.colorFromFloat 一致：alpha FIRST */
+        public static int colorFromFloat(float alpha, float red, float green, float blue) {
             return net.minecraft.util.ARGB.colorFromFloat(alpha, red, green, blue);
         }
     }

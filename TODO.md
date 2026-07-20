@@ -11,6 +11,8 @@
 | processResources | `expand replaceProperties`（修复 `Missing property (mod_id)`） | fabric.mod.json 占位符展开正确 |
 | 依赖修复（用户完成） | `fabric-loom-remap` 1.17-SNAPSHOT、Loader 0.19.3、Parchment 2025.03.23、Iris 1.8.8 等 | `compileJava` 0 错误 |
 | refMap 机制废弃 | `useLegacyMixinAp` 移除；remapJar 静态重映射 mixin 注解（实证：`method_22702`/`method_23182` 已写入注解）；JSON 中 refmap 条目为无害残留 | 反编译产物 jar 验证 |
+| 文本加速 bug 修复（4 环） | ① `drawCoreBuffers` ordinal 0→1（端末批次在方块实体之后）；② `FastColorCompat` sign 改 alpha-first；③ `StringRenderOutputMixin` 11 参构造注入 + setup() alpha 修复；④ `ComponentMesh` Y 坐标修正 | 告示牌普通/荧光字 + ModernUI 发光字体全部恢复 |
+| Xaero+Tweakeroo NPE 修复 | `compat/xaero/` 模块：`@ModifyVariable` on `getBuffer(RenderType)`，null→`RenderType.gui()`（拦截点位于 `@WrapMethod` 覆盖不到的链路尽头） | 灵魂出窍 + Xaero's mods 稳定运行 |
 
 ---
 
@@ -92,11 +94,11 @@
 
 ---
 
-## 🔴 Known Bugs (Pre-existing)
+## 🔴 Known Bugs (Pre-existing) — All Fixed
 
-| Bug | Symptom | Notes |
-|-----|---------|-------|
-| **GUI batching NPE with Tweakeroo Free Camera** | `fillDrawContexts` renderType=null in `flushBatching` during soul-out transition | 无法稳定复现（只在 Tweakeroo Free Camera 切换瞬间出现）。暂未修复，可加 null 检查做防御 |
+| Bug | Symptom | Resolution |
+|-----|---------|------------|
+| **GUI batching NPE with Tweakeroo Free Camera + Xaero's mods** | `fillDrawContexts` renderType=null in `flushBatching` during soul-out transition with Xaero's Minimap/WorldMap installed | ✅ Fixed: `compat/xaero/mixins/XaeroGuiGraphicsMixin` — `@ModifyVariable` on `getBuffer(RenderType)` replaces null with `RenderType.gui()` |
 
 ---
 

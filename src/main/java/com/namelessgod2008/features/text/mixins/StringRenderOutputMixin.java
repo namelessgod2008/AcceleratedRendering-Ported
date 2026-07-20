@@ -58,7 +58,7 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 	@Unique private					float						advance		= 0.0f;
 
 	@Inject(
-			method = "<init>",
+			method = "<init>(Lnet/minecraft/client/gui/Font;Lnet/minecraft/client/renderer/MultiBufferSource;FFIZLorg/joml/Matrix4f;Lnet/minecraft/client/gui/Font$DisplayMode;I)V",
 			at = @At("TAIL")
 	)
 	public void onInit(
@@ -71,6 +71,38 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 			Matrix4f			pose,
 			Font.DisplayMode	mode,
 			int					light,
+			CallbackInfo		ci
+	) {
+		if (			CoreFeature						.isLoaded						()
+				&&		bufferSource.getAcceleratable()	.isBufferSourceAcceleratable	()
+				&&		AcceleratedTextRenderingFeature	.isEnabled						()
+				&&		AcceleratedTextRenderingFeature	.shouldUseAcceleratedPipeline	()
+				&&	(	CoreFeature						.isRenderingLevel				()
+				||		CoreFeature						.isRenderingGui					())
+		) {
+			this.accelerated	= true;
+			this.advance		= 0.0f;
+		}
+	}
+
+	// 1.21.4 新增 11 参构造 (+backgroundColor, +inverseDepth) — renderText(String/FormattedCharSequence) 走这个。
+	// 没有此注入时 renderText 路径的 sink 永远 accelerated=false → FontMixin 缓存空 mesh → 普通文字只闪现一帧后消失。
+	@Inject(
+			method = "<init>(Lnet/minecraft/client/gui/Font;Lnet/minecraft/client/renderer/MultiBufferSource;FFIIZLorg/joml/Matrix4f;Lnet/minecraft/client/gui/Font$DisplayMode;IZ)V",
+			at = @At("TAIL")
+	)
+	public void onInitWithBackground(
+			Font				this$0,
+			MultiBufferSource	bufferSource,
+			float				positionX,
+			float				positionY,
+			int					color,
+			int					backgroundColor,
+			boolean				shadow,
+			Matrix4f			pose,
+			Font.DisplayMode	mode,
+			int					light,
+			boolean				inverseDepth,
 			CallbackInfo		ci
 	) {
 		if (			CoreFeature						.isLoaded						()
@@ -206,8 +238,13 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 		var textColor = style.getColor();
 
 		if (textColor != null) {
-			// Style has a specific color — use it directly (1.21.4: no dimFactor)
-			this.computedColor = textColor.getValue();
+			// TextColor.getValue() 只有 24-bit RGB（alpha=0）。按 vanilla getTextColor() 语义
+			// 继承构造色的 alpha，否则 style 染色文字（含 8xOutline 描边经 WithColorSink 注入的
+			// 颜色）alpha=0 全透明。
+			this.computedColor = FastColorCompat.ARGB32.color(
+					FastColorCompat.ARGB32.alpha(this.color),
+					textColor.getValue()
+			);
 		} else {
 			// Use the base color from the constructor (vanilla's packed color field)
 			this.computedColor = color;

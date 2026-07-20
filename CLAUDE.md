@@ -11,6 +11,7 @@
 - Java 包名已全量重命名：`com.github.argon4w.acceleratedrendering` → **`com.namelessgod2008`**（374 文件；含 mixin JSON `package`/`plugin` 字段、fabric.mod.json 入口点、Iris compat mixin 的 `Lcom/...` 描述符）
 - MOD_ID 仍为 `acceleratedrendering`，资源命名空间必须是 `assets/acceleratedrendering`（见 Pitfall #4g）
 - refMap 机制已废弃 — `fabric-loom-remap` 静态重映射注解（见 Pitfall #4e）
+- ⚠️ 已有 5 处文本加速渲染 bug 已修（见 Pitfall #4h、#8、#9；`StringRenderOutputMixin` 11 参构造注入）；告示牌文字现在正常显示
 
 ### 第一次读这些文件
 | 文件 | 位置 | 用途 |
@@ -108,11 +109,12 @@ Each wrapper delegates `isAccelerated()`, `doRender()`, `beginTransform()`, `end
 | `core.mixins.json` | Buffer pipeline, LevelRenderer, GameRenderer | Active |
 | `feature.entities.mixins.json` | Entity shadow rendering | Active |
 | `feature.modelparts.mixins.json` | ModelPart compile acceleration | Active |
-| `feature.text.mixins.json` | BakedGlyph, Font text acceleration | Active (StringRenderOutput disabled) |
+| `feature.text.mixins.json` | BakedGlyph, Font text acceleration | Active (StringRenderOutput ✅ re-enabled) |
 | `feature.items.mixins.json` | Item/block rendering acceleration | Active (limited) |
 | `compat.iris.mixins.json` | Iris shader compat | @Pseudo, optional |
 | `compat.immediatelyfast.mixins.json` | ImmediatelyFast compat | @Pseudo, optional |
 | `compat.modernui.mixins.json` | Modern UI compat | @Pseudo, optional |
+| `compat.xaero.mixins.json` | Xaero's Minimap/World Map compat | `getBuffer` null renderType 防御（Tweakeroo 灵魂出窍） |
 
 ---
 
@@ -170,14 +172,19 @@ Modern UI mixins (`feature.modernui.mixins.json`) target obfuscated class intern
 
 **历史备注**：reFabricated 原仓库用标准 Loom 1.16 + `useLegacyMixinAp = true` + refMap。旧 AP 的"非 MC 目标必须显式 remap=false 否则编译报错"的强制约束在本副本已不存在，但该约定仍应遵守。
 
-### 4f. Known issue: GUI batching NPE with Tweakeroo Free Camera
-`GuiBatchingController.flushBatching()` 中 `fillDrawContexts` 的 `renderType` 可能为 null（Tweakeroo 灵魂出窍切换时渲染状态不稳定）。无法稳定复现，预存 bug，未修复。临时防御：加 null 检查跳过该 context。
+### 4f. Known issue: GUI batching NPE with Tweakeroo Free Camera → ✅ Fixed via `compat/xaero`
+Xaero's Minimap/World Map 在 Tweakeroo 灵魂出窍关闭瞬间调用 `GuiGraphics.fill(null, ...)` 传入 null RenderType → AR 的 `@WrapMethod` 跳过 `original.call()` 直达 `submitFill` → `FillDrawContext(null)` → `flushBatching` 时 `getBuffer(null)` NPE。**修复**：`compat/xaero/mixins/XaeroGuiGraphicsMixin` 用 `@ModifyVariable` 在 `MultiBufferSource$BufferSource.getBuffer(RenderType)` 入口将 null 替换为 `RenderType.gui()`。详见 [[memory/text-sign-bug-investigation]] 及 [[memory/ported-repo-migration]]。
 
 ### 4g. 包重命名与资源命名空间一致性（2026-07-18，本副本）
 本副本从 reFabricated 复制而来，涉及三处必须一致的命名，曾各自引发一类故障：
 1. **Java 包名 = 目录路径**：文件在 `com/namelessgod2008/` 下，package 声明必须同步。全量重命名时**必须同时替换**：856 处 import、Iris compat mixin 中 22 处 `Lcom/github/argon4w/...` 斜杠描述符（`@At(target=...)` 注入自身类）、18 个 mixin JSON 的 `"package"`/`"plugin"` 字段、fabric.mod.json 两个入口点。漏任何一类 → 编译失败或 Mixin 加载失败。
 2. **资源命名空间 = MOD_ID**：`ResourceLocationUtils.create()` 用 `MOD_ID = "acceleratedrendering"` 查资源。assets 目录必须是 `assets/acceleratedrendering/`（曾是 `assets/acceleratedrendering-ported/` → 启动时 `Cannot found compute shader` 崩溃）。40 个 `.compute` shader 全部依赖此路径。
 3. **processResources 模板展开**：fabric.mod.json 含 `${mod_id}` 等 7 个占位符，`filesMatching` 必须 `expand replaceProperties`（完整映射），只传 `version` 会构建失败。
+
+### 4h. 帧图 `endLastBatch` ordinal 验证（2026-07-18，告示牌文字消失的根因之一）
+1.21.4 帧图 `method_62214` 中 `endLastBatch` 出现 3 次（entities→BE→translucent 之间各一次）。`drawCoreBuffers` 必须注入在**方块实体之后**的那个 `endLastBatch`（bytecode offset 370, ordinal=1）。错用 ordinal=0（offset 336, 在 `renderEntities` 和 `renderBlockEntities` 之间）→ 方块实体阶段（告示牌、箱子等）写入加速 buffer 的数据当帧不画 → 随后被 `flushBatching`（GUI 阶段）用正交矩阵 draw→clear → 数据消失。
+
+移植到帧图时 **ordinal 不可沿用 1.21.1 的取值** — 必须用 `javap -p -c LevelRenderer.class` 核对目标方法内同名调用的次序和上下文。详细分析见 [[text-sign-bug-investigation]]。
 
 ### 5. Rendering context checks are CRITICAL
 Every accelerated mixin must check the rendering context:
@@ -189,6 +196,7 @@ Every accelerated mixin must check the rendering context:
 In MC 1.21.4, `renderLevel` delegates rendering to frame graph lambdas (`method_62214` in Fabric intermediary). `endLastBatch()`/`endOutlineBatch()` calls are inside the lambda, NOT in `renderLevel` itself:
 - `startRenderLevel`/`stopRenderLevel` → target `renderLevel` (HEAD/RETURN) with 8 params: `(GraphicsResourceAllocator, DeltaTracker, boolean, Camera, GameRenderer, Matrix4f, Matrix4f, CallbackInfo)`
 - `drawCoreBuffers`/`endOutlineBatches` → target `method_62214` with 14 frame graph params
+- **⚠️ `endLastBatch` ordinal 验证**：1.21.4 帧图中 `endLastBatch` 出现多次（entities→BE→translucent 各阶段之间均有）。`drawCoreBuffers` 必须注入在 **方块实体之后** 的 `endLastBatch`（off 370, ordinal=1）。错用 ordinal=0（off 336, entities 和 BE 之间）会导致方块实体阶段写入的加速数据当帧不画→随后被 GUI 批处理错误消费。**移植到帧图时 ordinal 不可沿用 1.21.1 的取值，必须用 javap 重新核对。**
 
 ### 7. frame graph lambda signature (14 params)
 ```java
@@ -204,12 +212,13 @@ In MC 1.21.4, `renderLevel` delegates rendering to frame graph lambdas (`method_
 - Colors FROM vanilla MC (`ModelPart.compile()` pColor, entity model tints): already in ABGR format → pass through directly to `mesh.write()`
 - Colors WE compute (`FastColorCompat.ARGB32.color()`, block tints, shadow colors): need ARGB→ABGR conversion via `FastColorCompat.ABGR32.fromArgb32()` before `mesh.write()`
 - `FastColorCompat.ABGR32.fromArgb32()` does R/B swap ONLY: `(argb & 0xFF00FF00) | ((argb >> 16) & 0xFF) | ((argb & 0xFF) << 16)` — NOT `Integer.reverseBytes()` (which does full byte reversal producing wrong format)
+- `FastColorCompat.ABGR32.fromArgb32()` does R/B swap ONLY: `(argb & 0xFF00FF00) | ((argb >> 16) & 0xFF) | ((argb & 0xFF) << 16)` — NOT `Integer.reverseBytes()` (which does full byte reversal producing wrong format)
 
 ### 9. `FastColorCompat` utility
-Replaces removed `net.minecraft.util.FastColor`. Key differences:
-- `ARGB32.color(r, g, b, a)` → maps to `ARGB.color(a, r, g, b)` (alpha FIRST)
+Replaces removed `net.minecraft.util.FastColor`. **⚠️ 2026-07-18 修复：4 参签名已改为与上游一致的 alpha-first 顺序**（全项目 9 处调用点均为上游移植代码、全按 `(alpha, r, g, b)` 传参，参数类型同为 int 编译器无法检测错位）。Key differences:
+- `ARGB32.color(a, r, g, b)` → maps to `ARGB.color(a, r, g, b)` — 与上游 `FastColor.ARGB32.color` 签名一致
 - `ARGB32.color(alpha, packedColor)` → extracts R/G/B and calls `ARGB.color(alpha, r, g, b)`
-- `ARGB32.colorFromFloat(r, g, b, 1.0f)` → calls `ARGB.colorFromFloat(1.0f, r, g, b)` (alpha FIRST)
+- `ARGB32.colorFromFloat(a, r, g, b)` → calls `ARGB.colorFromFloat(a, r, g, b)` — alpha FIRST
 - `ABGR32.fromArgb32(argb)` → swaps R and B channels only (NOT `Integer.reverseBytes`)
 - `ABGR32.alpha(abgr)` → extracts alpha byte from ABGR
 
@@ -283,11 +292,11 @@ Many `.java` files use TAB indentation. **Avoid `sed` with `\n` or `\t` in repla
 | **Item/block acceleration** | ✅ Working | `ItemRendererMixin` (public `renderItem` remap=true, private `renderModelLists` remap=true — 注解由 remapJar 静态重映射, no require=0) + `ModelBlockRendererMixin` + `SimpleBakedModelMixin` with color/stride fixes |
 | **Entity model acceleration** | ✅ Working | `ModelPartMixin.compile()` with `isRenderingLevel()` check |
 | **Entity shadows** | ✅ Working | Color conversion fix |
-| **Text acceleration** | ✅ Working | BakedGlyph render param semantics fixed (color/bold/packedLight); FontMixin renderText descriptors fixed (+Z bidirectional); drawInBatch8xOutline require=0 by design |
+| **Text acceleration** | ✅ Working | BakedGlyph render param semantics fixed (color/bold/packedLight); FontMixin renderText descriptors fixed (+Z bidirectional); drawInBatch8xOutline require=0 by design; **StringRenderOutput 11-param constructor injection + FastColorCompat sign fix + LevelRenderer ordinal fix (告示牌文字, 2026-07-18)** |
 | **Multipart Baked Model** | ✅ Working | Lazy Boolean cache + instanceof checks; no constructor injection |
 | **Weighted Baked Model** | ✅ Working | `SimpleWeightedRandomList<BakedModel>` + `unwrap()` + `getRandomValue()` |
 | **Item tinting (color)** | ✅ Working | `TintLayerColors(tintLayers)` from 1.21.4 TintSource; accelerated model path skips when tint layers present |
-| **StringRenderOutput** | ✅ Working | Updated to 1.21.4: `r/g/b/a`→packed `color`, `dropShadow`→`drawShadow`, `dimFactor` removed, `finish(float)` no backgroundColor |
+| **StringRenderOutput** | ✅ Working | Updated to 1.21.4: packed `color`, `drawShadow`, no `dimFactor`, `finish(float)`; **11-param constructor inject added & style color alpha fix (2026-07-18, 告示牌荧光文字)** |
 | **GUI batching** (fill/blit/slot) | ✅ Working | `flushBatching()` excludes ENTITY/BLOCK; `innerBlit` updated; `Lighting` restored; `GuiMixin` scoped to `renderItemHotbar`; `AbstractContainerScreenMixin` + `InventoryScreenMixin` enabled |
 | **GUI item batching** | ✅ Working | `ItemStackRenderState.render()` + `ItemModelResolver.updateForTopItem()` replaces removed `ItemRenderer.render()` |
 | **GUI font/string batching** | ✅ Working | `context.drawString()` via `font.drawInBatch()` 10-param; `gui.FontMixin` active |

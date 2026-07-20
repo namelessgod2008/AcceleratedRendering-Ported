@@ -84,7 +84,7 @@ public class ComponentMesh {
 				SCRATCH.set			(transform);
 				SCRATCH.translate	(
 						positionX + shadowOffset + offset,
-						positionX + shadowOffset,
+						positionY + shadowOffset,
 						0.0f
 				);
 

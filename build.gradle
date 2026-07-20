@@ -85,6 +85,8 @@ dependencies {
 	modCompileOnly "maven.modrinth:axiom:ItmR0IzD"
 	modCompileOnly "maven.modrinth:malilib:ifi4uRpL"
 	modCompileOnly "maven.modrinth:tweakermore:opXShlFN"
+	modCompileOnly "maven.modrinth:tweakeroo:tuipaoCU"
+	modCompileOnly "maven.modrinth:rei:rZEvtmwe"
 	modCompileOnly "maven.modrinth:trinkets-canary:3.10.0-1.21.4"
 	modCompileOnly "maven.modrinth:touhoulittlemaid-orihime:0.8.2-neo1.5.3+mc1.21.1"
 	modCompileOnly "curse.maven:ftb-library-fabric-438495:7312255"

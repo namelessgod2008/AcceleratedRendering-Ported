@@ -92,7 +92,11 @@ public class LevelRendererMixin {
         at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/client/renderer/MultiBufferSource$BufferSource;endLastBatch()V",
-            ordinal = 0
+            // ordinal 0 (offset 336) 位于 renderEntities 之后、renderBlockEntities(offset 365) 之前 —
+            // 告示牌等方块实体阶段写入的加速数据（含文字）在 ordinal 0 绘制点之后才产生，当帧永远画不出来，
+            // 随后还会被 GUI flushBatching 以正交矩阵错误消费。必须用 ordinal 1 (offset 370)：
+            // renderBlockEntities 之后的 endLastBatch，与 1.21.1 上游的绘制时机语义一致。
+            ordinal = 1
         )
     )
     public void drawCoreBuffers(
