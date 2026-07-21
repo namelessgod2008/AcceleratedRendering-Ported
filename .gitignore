@@ -32,6 +32,10 @@ bin/
 
 run/
 
+# decompile artifacts
+
+.decompile/
+
 # java
 
 hs_err_*.log

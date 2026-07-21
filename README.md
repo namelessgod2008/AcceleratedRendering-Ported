@@ -41,6 +41,7 @@
 | ModernUI 兼容 | ModernUI 3.12.0.3 适配（**编译依赖必须与运行时匹配**） |
 | Mixin 重映射 | `fabric-loom-remap` 静态重映射注解为 intermediary（refMap 已废弃） |
 | Xaero 兼容 | `compat/xaero/` — Tweakeroo 灵魂出窍 NPE 防御（2026-07-18） |
+| 灵魂出窍 HUD 文字消失 | ✅ 已修复 (2026-07-21): `GuiMixin` 注入点从 HEAD→方法体内 INVOKE AFTER，方法体被取消时永不触发 |
 
 ### ⚠️ 部分实现 / 待验证
 
