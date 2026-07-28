@@ -196,8 +196,14 @@ public class GuiGraphicsMixin {
 		);
 	}
 
-	// 1.21.4 innerBlit: added Function<ResourceLocation, RenderType> param + trailing int; blitOffset removed
-	@WrapMethod(method = "innerBlit", remap = false, require = 0)
+	// innerBlit always passes through to vanilla. blitSprite calls
+	// (slot highlights) are intercepted at a higher level by
+	// AbstractContainerScreenMixin and never reach here.
+	// blit/drawTexture calls (REI, other mods) reach here and
+	// the accelerated GPU batching pipeline for POS_TEX_COLOR
+	// blits has an unresolved runtime bug (static shader analysis
+	// shows no issues — likely GPU driver or VAO config specific).
+	@WrapMethod(method = "innerBlit")
 	public void renderBlitFast(
 			Function<ResourceLocation, RenderType>	renderTypeGetter,
 			ResourceLocation						atlasLocation,
@@ -212,43 +218,18 @@ public class GuiGraphicsMixin {
 			int										color,
 			Operation<Void>							original
 	) {
-		if (		!	CoreFeature.isLoaded				()
-				||	!	CoreFeature.isGuiBatching			()
-				||		CoreFeature.shouldByPassGuiBatching	()
-		) {
-			original.call(
-					renderTypeGetter,
-					atlasLocation,
-					minX,
-					maxX,
-					minY,
-					maxY,
-					minU,
-					maxU,
-					minV,
-					maxV,
-					color
-			);
-			return;
-		}
-
-		var last = pose.last();
-
-		GuiBatchingController.INSTANCE.submitBlit(
-				last.pose	(),
-				last.normal	(),
+		original.call(
+				renderTypeGetter,
 				atlasLocation,
 				minX,
 				maxX,
 				minY,
 				maxY,
-				0,
-				color,
 				minU,
 				maxU,
 				minV,
 				maxV,
-				null
+				color
 		);
 	}
 

@@ -1,50 +1,54 @@
 {
-	"schemaVersion": 1,
-	"id": "${mod_id}",
-	"version": "${mod_version}",
-	"name": "${mod_name}",
-	"description": "${mod_description}",
-	"authors": [
-		"${mod_authors}"
-	],
-	"contributors": [
-		"namelessgod2008"
-	],
-	"contact": {
-		"sources": "https://github.com/ZhuRuoLing/AcceleratedRendering-reFabricated"
-	},
-	"license": "${mod_license}",
-	"environment": "client",
-	"icon": "logo.png",
-	"accessWidener": "acceleratedrendering.accesswidener",
-	"entrypoints": {
-		"client": [
-			"com.namelessgod2008.AcceleratedRenderingModEntry"
-		],
-		"modmenu": [
-			"com.namelessgod2008.ARModMenu"
-		]
-	},
-	"mixins": [
-		"acceleratedrendering.compat.iris.mixins.json",
-		"acceleratedrendering.compat.immediatelyfast.mixins.json",
-		"acceleratedrendering.compat.xaero.mixins.json",
-		"acceleratedrendering.compat.tweakeroo.mixins.json",
-		"acceleratedrendering.core.mixins.json",
-		"acceleratedrendering.feature.entities.mixins.json",
-		"acceleratedrendering.feature.items.mixins.json",
-		"acceleratedrendering.compat.vanilla.mixins.json",
-		"acceleratedrendering.feature.filter.mixins.json",
-		"acceleratedrendering.feature.modelparts.mixins.json",
-		"acceleratedrendering.feature.modernui.mixins.json",
-		"acceleratedrendering.feature.text.mixins.json"
-	],
-	"depends": {
-		"fabricloader": ">=0.16.11",
-		"java": ">=21",
-		"minecraft": ["1.21.4"],
-		"fabric-resource-loader-v0": "*",
-		"fabric-networking-api-v1": "*",
-		"forgeconfigapiport": "*"
-	}
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${mod_version}",
+  "name": "${mod_name}",
+  "description": "${mod_description}",
+  "authors": [
+    "${mod_authors}"
+  ],
+  "contributors": [
+    "namelessgod2008"
+  ],
+  "contact": {
+    "sources": "https://github.com/ZhuRuoLing/AcceleratedRendering-reFabricated"
+  },
+  "license": "${mod_license}",
+  "environment": "client",
+  "icon": "logo.png",
+  "accessWidener": "acceleratedrendering.accesswidener",
+  "entrypoints": {
+    "client": [
+      "com.namelessgod2008.AcceleratedRenderingModEntry"
+    ],
+    "modmenu": [
+      "com.namelessgod2008.ARModMenu"
+    ]
+  },
+  "mixins": [
+    "acceleratedrendering.compat.iris.mixins.json",
+    "acceleratedrendering.compat.immediatelyfast.mixins.json",
+    "acceleratedrendering.compat.xaero.mixins.json",
+    "acceleratedrendering.compat.forgeconfigapiport.mixins.json",
+    "acceleratedrendering.compat.rei.mixins.json",
+    "acceleratedrendering.compat.tweakeroo.mixins.json",
+    "acceleratedrendering.core.mixins.json",
+    "acceleratedrendering.feature.entities.mixins.json",
+    "acceleratedrendering.feature.items.mixins.json",
+    "acceleratedrendering.compat.vanilla.mixins.json",
+    "acceleratedrendering.feature.filter.mixins.json",
+    "acceleratedrendering.feature.modelparts.mixins.json",
+    "acceleratedrendering.feature.modernui.mixins.json",
+    "acceleratedrendering.feature.text.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.11",
+    "java": ">=21",
+    "minecraft": [
+      "1.21.4"
+    ],
+    "fabric-resource-loader-v0": "*",
+    "fabric-networking-api-v1": "*",
+    "forgeconfigapiport": "*"
+  }
 }

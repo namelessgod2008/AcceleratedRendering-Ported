@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "refmap": "acceleratedrendering-refmap.json",
+  "minVersion": "0.8",
+  "package": "com.namelessgod2008.compat.rei.mixins",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "com.namelessgod2008.compat.rei.ReiCompatMixinPlugin",
+  "mixinPriority": 1010,
+  "client": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -376,8 +376,27 @@ context.drawString(graphics.bufferSource);
 			fillDrawContexts.add(context);
 			layer			.add(context);
 		} else {
-			var highestEntry = depthLayers	.lastEntry	();
-			var highestDepth = highestEntry	.getKey		();
+				// Guard: depthLayers may be empty on first call (e.g. simpleshulkerpreview)
+				if (depthLayers.isEmpty()) {
+					var layer = getLayer(getGlobalDepth(
+							transform.m22(),
+							transform.m32(),
+							blitOffset
+					));
+					var context = new FillDrawContext(
+							new Matrix4f(transform),
+							new Matrix3f(normal),
+							renderType,
+							minX, minY, maxX, maxY,
+							blitOffset, color, 0, 0
+					);
+					fillDrawContexts.add(context);
+					layer.add(context);
+					return;
+				}
+
+				var highestEntry = depthLayers	.lastEntry	();
+				var highestDepth = highestEntry	.getKey		();
 			var highestLayer = highestEntry	.getValue	();
 			var elementLayer = getLayer					(highestDepth + highestLayer.getLayerThickness());
 
@@ -443,8 +462,27 @@ context.drawString(graphics.bufferSource);
 			gradientDrawContexts.add(context);
 			layer				.add(context);
 		} else {
-			var highestEntry = depthLayers	.lastEntry	();
-			var highestDepth = highestEntry	.getKey		();
+				// Guard: depthLayers may be empty on first call (e.g. simpleshulkerpreview)
+				if (depthLayers.isEmpty()) {
+					var layer = getLayer(getGlobalDepth(
+							transform.m22(),
+							transform.m32(),
+							blitOffset
+					));
+					var context = new GradientDrawContext(
+							new Matrix4f(transform),
+							new Matrix3f(normal),
+							renderType,
+							minX, minY, maxX, maxY,
+							blitOffset, colorFrom, colorTo, 0, 0
+					);
+					gradientDrawContexts.add(context);
+					layer.add(context);
+					return;
+				}
+
+				var highestEntry = depthLayers	.lastEntry	();
+				var highestDepth = highestEntry	.getKey		();
 			var highestLayer = highestEntry	.getValue	();
 			var elementLayer = getLayer					(highestDepth + highestLayer.getLayerThickness());
 
