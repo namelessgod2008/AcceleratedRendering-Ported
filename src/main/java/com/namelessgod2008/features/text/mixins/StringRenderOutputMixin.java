@@ -51,6 +51,7 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 
 	@Unique	private					ComponentMesh.Builder		mesh		= null;
 	@Unique private					RenderType					type		= null;
+	@Unique private					RenderType					effect		= null;
 	@Unique private					Style						style		= null;
 	@Unique private					boolean						accelerated	= false;
 	@Unique private					boolean						outline		= false;
@@ -137,17 +138,27 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 			var fontSet	= this$0	.getFontSet		(font);
 			var info	= fontSet	.getGlyphInfo	(codePoint, this$0.filterFishyGlyphs);
 			var glyph	= fontSet	.getGlyph		(codePoint);
-			var type	= glyph		.renderType		(mode);
-			var advance	= info		.getAdvance		(bold);
+			var effect	= fontSet.whiteGlyph()	.renderType		(mode);
+			var type	= glyph					.renderType		(mode);
+			var advance	= info					.getAdvance		(bold);
 
 			if (this.style == null) {
-				setup(style, type);
+				setup(
+						type,
+						effect,
+						style
+				);
 			} else {
 				if (		!this.type	.equals(type)
 						||	!this.style	.equals(style)
+						||	!this.effect.equals(effect)
 				) {
-					flush(fontSet);
-					setup(style, type);
+					flush0();
+					setup(
+							type,
+							effect,
+							style
+					);
 				}
 			}
 
@@ -163,11 +174,13 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 
 				glyph = fontSet.getRandomGlyph(info);
 
+				var buffer = bufferSource.getBuffer(type);
+
 				var boldOffset		= bold			? info.getBoldOffset	() : 0.0f;
 				var shadowOffset	= drawShadow	? info.getShadowOffset	() : 0.0f;
 
-				var extension1 = glyph							.getAccelerated();
-				var extension2 = bufferSource.getBuffer(type)	.getAccelerated();
+				var extension1 = glyph	.getAccelerated();
+				var extension2 = buffer	.getAccelerated();
 
 				if (extension2.isAccelerated()) {
 					var renderer = extension1.getRenderer(italic);
@@ -231,8 +244,13 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 	}
 
 	@Unique
-	private void setup(Style style, RenderType type) {
+	private void setup(
+			RenderType	type,
+			RenderType	effect,
+			Style		style
+	) {
 		this.style	= style;
+		this.effect	= effect;
 		this.type	= type;
 
 		var textColor = style.getColor();
@@ -264,13 +282,15 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 		if (			this.accelerated
 				&& 		this.style	!= null
 				&&		this.type	!= null
+				&&		this.effect	!= null
 				&&	!	MUTABLE.isEmpty()
 		) {
-			flush(this$0.getFontSet(style.getFont()));
+			flush0();
 		}
 
 		this.style		= null;
 		this.type		= null;
+		this.effect		= null;
 		this.outline	= false;
 		this.computedColor	= 0;
 		this.advance	= 0.0f;
@@ -279,26 +299,29 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 	}
 
 	@Unique
-	private void flush(FontSet fontSet) {
-		var extension1 = bufferSource.getBuffer(type).getAccelerated();
+	private void flush0() {
+		var buffer1 = bufferSource.getBuffer(type);
+
+		if (mesh != null) {
+			mesh.addAdvance	(MUTABLE.getAdvance());
+			mesh.addSequence(
+					MUTABLE.bake(),
+					this.type,
+					this.effect,
+					this.advance
+			);
+		}
+
+		SCRATCH.set			(pose);
+		SCRATCH.translate	(
+				this.x,
+				this.y,
+				0.0f
+		);
+
+		var extension1 = buffer1.getAccelerated();
 
 		if (extension1.isAccelerated()) {
-			if (mesh != null) {
-				mesh.addAdvance	(MUTABLE.getAdvance());
-				mesh.addSequence(
-						MUTABLE.bake(),
-						this.type,
-						this.advance
-				);
-			}
-
-			SCRATCH.set			(pose);
-			SCRATCH.translate	(
-					this.x,
-					this.y,
-					0.0f
-			);
-
 			extension1.doRender(
 					AcceleratedStyledSequenceRenderer.INSTANCE,
 					MUTABLE,
@@ -309,13 +332,21 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 					computedColor
 			);
 		} else {
-			throw new IllegalStateException("Someone uses incorrect render type in the baked glyph.");
+			AcceleratedStyledSequenceRenderer.INSTANCE.buildSequenceMesh(
+					buffer1,
+					MUTABLE,
+					SCRATCH,
+					computedColor,
+					packedLightCoords
+			);
 		}
 
 		if (		style.isStrikethrough	()
 				||	style.isUnderlined		()
 		) {
-			var extension2 = bufferSource.getBuffer(fontSet.whiteGlyph().renderType(mode)).getAccelerated();
+			var buffer2 = bufferSource.getBuffer(effect);
+
+			var extension2 = buffer2.getAccelerated();
 
 			if (extension2.isAccelerated()) {
 				extension2.doRender(
@@ -328,7 +359,13 @@ public class StringRenderOutputMixin implements IAcceleratedStringRenderOutput {
 						computedColor
 				);
 			} else {
-				throw new IllegalStateException("Someone uses incorrect render type in the baked glyph.");
+				AcceleratedSequenceEffectRenderer.INSTANCE.buildSequenceMesh(
+						buffer2,
+						MUTABLE,
+						SCRATCH,
+						computedColor,
+						packedLightCoords
+				);
 			}
 		}
 

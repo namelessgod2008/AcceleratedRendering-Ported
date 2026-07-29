@@ -28,7 +28,7 @@
 |------|------|
 | 实体模型加速 | `ModelPart` compile 加速，GPU 计算着色器并行变换 |
 | 实体阴影加速 | 加速方块阴影渲染 |
-| 物品加速 (世界) | 掉落物、手持物品加速渲染 |
+| 物品加速 (世界) | 掉落物、手持物品加速渲染（含 Sodium 兼容，priority=999） |
 | 方块加速 | 方块模型渲染加速 (含着色) |
 | 文本加速 | `BakedGlyph`/`Font`/`StringRenderOutput` 加速渲染；告示牌文字已修复（2026-07-18: `endLastBatch` ordinal + `FastColorCompat` sign + 11 参构造注入） |
 | 模型加速 | Multipart、Weighted、SimpleBakedModel (1.21.4 API 适配) |

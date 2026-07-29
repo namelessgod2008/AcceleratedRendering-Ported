@@ -183,11 +183,19 @@ public class BakedGlyphMixin implements IAcceleratedRenderer<BakedGlyph.Effect>,
 			var position = new Vector3f(positions[i], context.depth);
 			var texCoord = texCoords[i];
 
-			meshBuilder
-					.addVertex	(position)
-					.setColor	(-1)
-					.setUv		(texCoord.x, texCoord.y)
-					.setLight	(0);
+			meshBuilder.addVertex(
+					position.x(),
+					position.y(),
+					position.z(),
+					0xFF_FF_FF_FF,
+					texCoord.x(),
+					texCoord.y(),
+					OverlayTexture.NO_OVERLAY,
+					0,
+					0.0f,
+					0.0f,
+					0.0f
+			);
 		}
 
 		var builder = AcceleratedEntityRenderingFeature

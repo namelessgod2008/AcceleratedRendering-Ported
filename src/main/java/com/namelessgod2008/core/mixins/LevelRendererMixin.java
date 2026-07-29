@@ -34,6 +34,11 @@ public class LevelRendererMixin {
 		Matrix4f projectionMatrix,
 		CallbackInfo ci
 	) {
+		// Defense against stuck GUI batching state after screen/world transitions
+		// (e.g. CSL may trigger GL state changes during resource reload)
+		if (CoreFeature.isGuiBatching()) {
+			CoreFeature.resetGuiBatching();
+		}
 		CoreFeature.setRenderingLevel();
 	}
 

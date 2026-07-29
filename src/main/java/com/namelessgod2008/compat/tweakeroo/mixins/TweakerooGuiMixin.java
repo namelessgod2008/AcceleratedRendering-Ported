@@ -5,7 +5,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * KNOWN BUG (2026-07-18, root cause fixed 2026-07-21):
@@ -30,7 +30,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class TweakerooGuiMixin {
 
 	@Inject(method = "startBatching", at = @At("HEAD"), cancellable = true, require = 0)
-	private void skipBatchingDuringFreeCamera(GuiGraphics graphics, CallbackInfo ci) {
+	private void skipBatchingDuringFreeCamera(GuiGraphics graphics, CallbackInfoReturnable<Boolean> cir) {
 		// Root cause fixed in GuiMixin — startBatching injection point moved
 		// from HEAD to inside the method body (getCameraPlayer() INVOKE AFTER).
 		// If Free Camera cancels the method, the body never executes and

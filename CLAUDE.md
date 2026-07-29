@@ -2,7 +2,7 @@
 
 # AcceleratedRendering-Ported — 项目架构与迁移笔记
 
-> ⚠️ **重要：在用户经过游戏测试并确认功能正常前，禁止修改 CLAUDE.md、memory/*.md 和 TODO.md。只允许修改源代码（src/）。**（本文档最后一次更新：2026-07-21，经用户明确指示 — 灵魂出窍文字消失 bug 修复已确认）
+> ⚠️ **重要：在用户经过游戏测试并确认功能正常前，禁止修改 CLAUDE.md、memory/*.md 和 TODO.md。只允许修改源代码（src/）。**（本文档最后一次更新：2026-07-29，经用户明确指示 — 物品加速修复已确认 & Sodium 兼容已确认）
 
 ## 🚀 新对话快速入门
 
@@ -20,7 +20,7 @@
 | 文件 | 位置 | 用途 |
 |------|------|------|
 | **CLAUDE.md** | 项目根目录（就是本文件） | 完整架构、关键易错点、Mixin 签名参考 |
-| **MEMORY.md** | `C:\Users\xzx\.claude\projects\D--Programs-MC-1-21-4-AcceleratedRendering-Ported\MEMORY.md` | 持久化知识索引（指向 `memory/` 目录下的 19 个专题文件） |
+| **MEMORY.md** | `C:\Users\xzx\.claude\projects\D--Programs-MC-1-21-4-AcceleratedRendering-Ported\MEMORY.md` | 持久化知识索引（指向 `memory/` 目录下的 25 个专题文件） |
 | **TODO.md** | 项目根目录 | 功能状态清单（✅ 已实现 / ⚠️ 部分实现 / ❌ 未实现） |
 
 ### 如何反编译外部 JAR
@@ -71,7 +71,7 @@ javap -p -c net/irisshaders/iris/mixin/fabric/MixinLevelRenderer.class
 
 ## 构建系统
 - **构建工具**：Gradle + `fabric-loom-remap` 1.17-SNAPSHOT（remapJar 静态重映射 mixin 注解，无 refMap）
-- **关键依赖**：Fabric API 0.119.4+1.21.4, ForgeConfigAPIPort 21.4.3, ModMenu 13.0.3, NeoForge Event Bus 8.0.5 (`include implementation`), Lombok 1.18.40, mixinconstraints 1.0.9
+- **关键依赖**：Fabric API 0.119.4+1.21.4, ForgeConfigAPIPort 21.4.3, ModMenu 13.0.3, NeoForge Event Bus 8.0.5 (`include implementation`), Lombok 1.18.40, mixinconstraints 1.0.9。`repositories` 中包含 `mavenCentral()`（forgeconfigapiport compat 需要，见 Pitfall #4l）
 - **modCompileOnly**：Sodium mc1.21.4-0.6.13, Iris 1.8.8+1.21.4, ModernUI 3.12.0.3, GeckoLib 4.8, EMF 3.2.4, ImmediatelyFast 1.3.4, Trinkets-canary 3.10.0-1.21.4, TouhouLittleMaid-orihime 0.8.2, FTB Library (curse 7312255), Axiom, MaLiLib, TweakerMore
 - **Access widener**：`src/main/resources/acceleratedrendering.accesswidener`（v2 named）
 - **Mixin JSON**：18 个存在于 resources；**10 个**注册于 `fabric.mod.json` → `mixins` 数组（core、entities、items、modelparts、text、filter、compat.vanilla、compat.iris、compat.immediatelyfast、feature.modernui）；其余 8 个未注册（create、entitymodelfeature、ftb、geckolib、touhoulittlemaid、sophisticated、trinkets、tweakmore）
@@ -118,6 +118,9 @@ EntityOutlineGenerator → SheetedDecalTextureGenerator → SpriteCoordinateExpa
 | `compat.immediatelyfast.mixins.json` | ImmediatelyFast 兼容 | @Pseudo，可选 |
 | `compat.modernui.mixins.json` | Modern UI 兼容 | @Pseudo，可选 |
 | `compat.xaero.mixins.json` | Xaero 小地图/世界地图兼容 | `getBuffer` null renderType 防御（Tweakeroo 灵魂出窍） |
+| `compat.forgeconfigapiport.mixins.json` | forgeconfigapiport 兼容 | C2ME night-config 3.6.5 冲突 workaround（Pitfall #4l） |
+| `compat.tweakeroo.mixins.json` | Tweakeroo 兼容 | 灵魂出窍安全网（Pitfall #4i） |
+| `compat.rei.mixins.json` | REI 兼容 | 占位（尚未有实际 mixin） |
 
 ---
 
@@ -205,6 +208,48 @@ Xaero 小地图/世界地图在 Tweakeroo 灵魂出窍关闭瞬间调用 `GuiGra
 `getCameraPlayer()` 是 `renderItemHotbar` 方法体中的第一条指令。若 Tweakeroo 在 HEAD 处取消方法体，该 INVOKE 永不执行 → 注入点永不触发 → `startBatching` 永不调用 → `GUI_BATCHING` 永不为 true → 无 bug。此修复通用，不依赖 `cameraEntity` 检测、不依赖 Mixin priority。
 
 **旧 workaround 已移除**：`compat/tweakeroo/mixins/TweakerooGuiMixin` 中的 `CameraEntity != player → ci.cancel()` 判定已移除，保留为无害安全网。
+
+### 4j. ✅ 已修复：物品加速在生产环境失效（Sodium FRAPI 冲突，2026-07-29）
+
+**症状**：生产环境（含 Sodium 0.6.13）物品加速完全失效——开关物品加速帧数不变，物品走原版渲染。开发环境（无 Sodium）正常。
+
+**根因**（2026-07-29 定位）：Sodium 的 FRAPI `ItemRendererMixin`（`features.render.frapi.ItemRendererMixin`）在 `ItemRenderer.renderItem()` HEAD 处注入 `@Inject(cancellable=true)`。当它取消方法时，整个 `renderItem` 的方法体被跳过——包括我们的 `@WrapOperation` 在 `renderModelLists` INVOKE 处的包装器。这就是为什么物品加速永远不触发。
+
+**修复**（`ItemRendererMixin.java`，全面重写）：
+1. 将注入策略从 `@WrapOperation` 在 `renderModelLists` INVOKE 处改为 **`@Inject` 在 `renderItem` HEAD 处，`priority=999`**（高于 Sodium 默认 priority=1000）
+2. 在回调中直接检查加速条件 → 满足则 `ci.cancel()` 并用 GPU 渲染 → 不满足则让 Sodium/原版处理
+3. 附魔物品（`foilType != NONE`）不加速——加速管线不支持 `VertexMultiConsumer` 箔片包装
+
+**关键教训**：
+- `@WrapOperation` 包装的是目标方法**内部**的 INVOKE 指令。如果目标方法本身被另一个 mixin 的 `@Inject(cancellable=true)` 取消，包装器永远没有机会执行
+- 解决办法：用自己的 `@Inject` 在 HEAD 处（上层的 mixin 回调），在自己执行加速的同时 cancel 掉方法体
+- `priority=999` 确保回调在 Sodium 默认 priority=1000 之前执行——必须先加速再让 Sodium 处理
+- 生产环境 `fabric-loom-remap` 不会影响 `priority` 属性（已验证：`RuntimeInvisibleAnnotations: priority=999`）
+
+### 4k. ✅ 已修复：GuiBatchingController `depthLayers` 空指针（2026-07-29）
+
+**症状**：生产环境 `simpleshulkerpreview` mod 通过 REI 触发 `GuiGraphics.fill()` 时，`GuiBatchingController.submitFill()` 在 `depthLayers.lastEntry().getKey()` 处 NPE 崩溃。
+
+**根因**：`submitFill()` 和 `submitGradient()` 在处理无 depth 的 RenderType 时，假设 `depthLayers` 已包含至少一层。但当首个 fill 调用触发时，`depthLayers` 为空 → `lastEntry()` 返回 null → NPE。
+
+**修复**（`GuiBatchingController.java`）：两个方法在访问 `lastEntry()` 前添加 `depthLayers.isEmpty()` 守卫——空时创建首层并直接添加 fill/gradient context。
+
+### 4l. ✅ 已修复：forgeconfigapiport 配置保存崩溃（C2ME night-config 冲突，2026-07-29）
+
+**症状**：通过 Mod Menu 关闭配置页面时游戏崩溃：`NoSuchFieldError: WritingMode.REPLACE_ATOMIC`。
+
+**根因**：C2ME 通过 jar-in-jar 打包了 night-config **3.6.5**（2022 版），而 forgeconfigapiport 打包了 **3.8.1**。`WritingMode.REPLACE_ATOMIC` 在 3.7.0 才加入。Fabric Loader 加载了 C2ME 的旧版本 → `ConfigTracker.writeConfig` 的字节码中 `getstatic REPLACE_ATOMIC` 指令在类链接时抛出 `NoSuchFieldError`。
+
+**修复**（新建 `compat/forgeconfigapiport/mixins/LoadedConfigMixin.java`）：
+- `@WrapOperation` 包装 `LoadedConfig.save()` 中对 `ConfigTracker.writeConfig()` 的调用
+- 捕获 `NoSuchFieldError`，降级使用 `WritingMode.valueOf("REPLACE")`（所有版本都有）
+- `@Pseudo` + `remap=false` + `require=0`（目标为 forgeconfigapiport 内部类）
+- 注册于 `acceleratedrendering.compat.forgeconfigapiport.mixins.json` → `fabric.mod.json`
+
+**已尝试但失败的方案**：
+- 在 build.gradle 中 `include("com.electronwill.night-config:core:3.8.1")` → Fabric Loader 仍加载 3.6.5
+- 删除 `.fabric/processedMods` → 3.6.5 被重新提取
+- `include implementation` night-config 到自己 JAR → 类加载器仍优先加载 C2ME 版本
 
 ### 5. 渲染上下文检查至关重要
 每个加速 mixin 都必须检查渲染上下文：
@@ -308,7 +353,7 @@ Xaero 小地图/世界地图在 Tweakeroo 灵魂出窍关闭瞬间调用 `GuiGra
 
 | 功能 | 状态 | 原因 / 待办 |
 |---------|--------|---------------|
-| **物品/方块加速** | ✅ 正常工作 | `ItemRendererMixin`（public `renderItem` remap=true，private `renderModelLists` remap=true — 注解由 remapJar 静态重映射，无 require=0）+ `ModelBlockRendererMixin` + `SimpleBakedModelMixin` 带颜色/stride 修复 |
+| **物品/方块加速** | ✅ 正常工作（含 Sodium） | `ItemRendererMixin`：`@Inject` 在 `renderItem` HEAD，`priority=999`（高于 Sodium FRAPI）。附魔物品走原版。`ModelBlockRendererMixin` + `SimpleBakedModelMixin` 带颜色/stride 修复 |
 | **实体模型加速** | ✅ 正常工作 | `ModelPartMixin.compile()` 带 `isRenderingLevel()` 检查 |
 | **实体阴影** | ✅ 正常工作 | 颜色转换修复 |
 | **文字加速** | ✅ 正常工作 | BakedGlyph 渲染参数语义已修复（color/bold/packedLight）；FontMixin renderText 描述符已修复（+Z bidirectional）；drawInBatch8xOutline require=0 按设计；**StringRenderOutput 11 参构造注入 + FastColorCompat 签名修复 + LevelRenderer ordinal 修复（告示牌文字，2026-07-18）** |
@@ -332,15 +377,15 @@ Xaero 小地图/世界地图在 Tweakeroo 灵魂出窍关闭瞬间调用 `GuiGra
 
 ## Mixin 方法参考
 
-### ItemRendererMixin（1.21.4）
-目标为 `ItemRenderer.renderItem()` 包装调用 `renderModelLists()`：
-- `renderItem` 在 1.21.4 中为 `public static` — 使用默认 `remap=true`（public 方法会被 intermediary 映射）
-- `renderModelLists` 为 `private static` — 使用默认 `remap=true`（生产环境 intermediary jar 会重命名所有方法，包括 private 方法；remapJar 静态重映射注解完成翻译）
-- 签名：`renderModelLists(BakedModel, int[], int, int, PoseStack, VertexConsumer)`
-- 处理器：`(BakedModel, int[], int, int, PoseStack, VertexConsumer, Operation<Void>)` — 无 ItemRenderer 实例
-- 在转换前使用 `instanceof IAcceleratedBakedModel` 检查
-- 仅当 `CoreFeature.isRenderingLevel()` 为 true 时才加速
-- 无 `require=0` — 这是核心功能，失败必须报错
+### ItemRendererMixin（1.21.4，2026-07-29 全面重写）
+**已从 `@WrapOperation` 在 `renderModelLists` 改为 `@Inject` 在 `renderItem` HEAD**：
+- `@Mixin(value = {ItemRenderer.class}, priority = 999)` — 高于 Sodium（默认 1000），先于 Sodium 的 FRAPI mixin 执行
+- `@Inject(method = "renderItem", at = @At("HEAD"), cancellable = true)` — 在方法体执行前拦截
+- 回调签名：`(ItemDisplayContext, PoseStack, MultiBufferSource, int, int, int[], BakedModel, RenderType, FoilType, CallbackInfo)` — 匹配 renderItem 的 9 参签名
+- 检查 `isRenderingLevel()` + `foilType == NONE` + `isAccelerated()` — 全部通过才 `ci.cancel()` 并执行 GPU 渲染
+- 附魔物品（`foilType != NONE`）直接返回，让原版处理（加速管线不支持 VertexMultiConsumer 箔片包裹）
+- `renderItem` 方法调用链：`ItemStackRenderState.render()` → `LayerRenderState.render()` → `ItemRenderer.renderItem()`（via invokestatic）
+- **不再使用 `@WrapOperation`**，因为 Sodium FRAPI 用 `@Inject(cancellable=true)` 取消方法体后，任何方法体内的 INVOKE 包装器都无法触发。详见 Pitfall #4j。
 
 ### BakedGlyphMixin（1.21.4）
 - `render(boolean, float, float, Matrix4f, VertexConsumer, int, boolean, int)` = `(italic, x, y, matrix, buffer, color, bold, packedLight)`

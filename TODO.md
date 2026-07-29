@@ -24,7 +24,7 @@
 |---------|----------|-------|
 | 实体模型部件加速 | `ModelPartMixin` | 仅 `compile()`；`isRenderingLevel()` 守卫 |
 | 实体阴影加速 | `EntityRenderDispatcherMixin` | 颜色修复：通过 `FastColorCompat` 进行 ABGR 转换 |
-| 物品加速 (世界) | `ItemRendererMixin` | `renderModelLists` 通过 refMap 使用 `remap=true`；`renderItem` 使用默认 `remap=true` |
+| 物品加速 (世界) | `ItemRendererMixin` | `@Inject` 在 `renderItem` HEAD，`priority=999`（高于 Sodium FRAPI）。`@WrapOperation` `require=0` 作为无 Sodium 环境的 fallback。
 | 方块加速 | `ModelBlockRendererMixin` | 使用 `-1` 颜色（无着色） |
 | 方块加速 (含着色) | `ModelBlockRendererMixin` | 1.21.4 TintSource 预着色 BakedQuad 顶点数据；`-1` 避免重复着色 |
 | BakedModel/BakedQuad/SimpleBakedModel | `models.BakedModelMixin`、`models.BakedQuadMixin`、`models.SimpleBakedModelMixin` | STRIDE 修复 + 颜色直通 |
@@ -102,6 +102,9 @@
 |-----|---------|--------|
 | **Tweakeroo 灵魂出窍 + Xaero's mods 时 GUI 批处理 NPE** | 灵魂出窍过渡期间 `flushBatching` 中 `fillDrawContexts` renderType=null | ✅ 已修复：`compat/xaero/mixins/XaeroGuiGraphicsMixin` |
 | **灵魂出窍时 HUD overlay 文字全局消失** | Free Camera 激活时 MiniHUD/Xaero/告示牌/F3/ESC 所有文字消失 | ✅ 已修复 (2026-07-21)：`GuiMixin` 注入点从 HEAD→方法体内 `getCameraPlayer()` INVOKE AFTER。根因：Mixin HEAD 回调全部执行完毕后才会检查 `ci.cancel()`，AR 的 `startBatching` 在 `ci.cancel()` 之前已执行。 |
+| **Sodium 环境下物品加速失效** | 生产环境（含 Sodium 0.6.13）物品加速帧数不变 | ✅ 已修复 (2026-07-29)：`ItemRendererMixin` 从 `@WrapOperation` 改为 `@Inject` 在 `renderItem` HEAD，`priority=999`（高于 Sodium FRAPI）。Pitfall #4j。 |
+| **GuiBatchingController.submitFill NPE** | simpleshulkerpreview + REI 时 `depthLayers.lastEntry()` 空指针崩溃 | ✅ 已修复 (2026-07-29)：添加 `depthLayers.isEmpty()` 守卫。Pitfall #4k。 |
+| **forgeconfigapiport 配置保存崩溃** | Mod Menu 配置关闭时 `NoSuchFieldError: WritingMode.REPLACE_ATOMIC` | ✅ 已修复 (2026-07-29)：新建 `LoadedConfigMixin` 捕获 `NoSuchFieldError` 降级为 `REPLACE`。C2ME 的 night-config 3.6.5 缺少此字段。Pitfall #4l。 |
 
 ---
 

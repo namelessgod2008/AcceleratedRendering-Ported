@@ -1,13 +1,12 @@
 package com.namelessgod2008.features.text.cache;
 
+import com.namelessgod2008.core.buffers.accelerated.builders.IAcceleratedVertexConsumer;
 import com.namelessgod2008.core.buffers.accelerated.builders.VertexConsumerExtension;
 import com.namelessgod2008.features.text.extensions.BakedGlyphExtension;
 import com.namelessgod2008.features.text.key.ISequenceKey;
 import com.namelessgod2008.features.text.renderers.AcceleratedSequenceEffectRenderer;
 import com.namelessgod2008.features.text.renderers.AcceleratedStyledSequenceRenderer;
 import com.mojang.blaze3d.font.GlyphInfo;
-import it.unimi.dsi.fastutil.floats.FloatArrayList;
-import it.unimi.dsi.fastutil.floats.FloatList;
 import it.unimi.dsi.fastutil.objects.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -35,10 +34,10 @@ public class ComponentMesh {
 	public static final Matrix4f SCRATCH	= new Matrix4f().identity();
 	public static final Matrix3f NORMAL		= new Matrix3f().identity();
 
-	private final Map<RenderType, Sequences>	sequences;
-	private final List<Obfuscated>				obfuscatedGlyphs;
-	private final float							advance;
-	private final boolean						shadow;
+	private final List<SequenceSet>	sequenceSets;
+	private final List<Obfuscated>	obfuscatedGlyphs;
+	private final float				advance;
+	private final boolean			shadow;
 
 	public float render(
 			Font				mcFont,
@@ -53,7 +52,7 @@ public class ComponentMesh {
 		var dimFactor = shadow ? 0.25f : 1.0f;
 
 		var defaultColor = FastColorCompat.ARGB32.color(
-						FastColorCompat.ARGB32.alpha	(color),
+				FastColorCompat.ARGB32.alpha	(color),
 				(int) (	FastColorCompat.ARGB32.red	(color) * dimFactor),
 				(int) (	FastColorCompat.ARGB32.green	(color) * dimFactor),
 				(int) (	FastColorCompat.ARGB32.blue	(color) * dimFactor)
@@ -72,11 +71,13 @@ public class ComponentMesh {
 
 			var glyph = fontSet.getRandomGlyph(glyphInfo);
 
+			var buffer = bufferSource.getBuffer(glyph.renderType(mode));
+
 			var boldOffset		= bold		? glyphInfo.getBoldOffset	() : 0.0f;
 			var shadowOffset	= shadow	? glyphInfo.getShadowOffset	() : 0.0f;
 
-			var extension1 = glyph											.getAccelerated();
-			var extension2 = bufferSource.getBuffer(glyph.renderType(mode))	.getAccelerated();
+			var extension1 = glyph	.getAccelerated();
+			var extension2 = buffer	.getAccelerated();
 
 			if (extension2.isAccelerated()) {
 				var renderer = extension1.getRenderer(italic);
@@ -120,35 +121,46 @@ public class ComponentMesh {
 			}
 		}
 
-		for (var sequences : sequences.values()) {
-			var extension1 = bufferSource.getBuffer(sequences.getRenderType()).getAccelerated();
+		for (int index1 = 0, size1 = sequenceSets.size(); index1 < size1; index1 ++) {
+			var sequenceSet	= sequenceSets	.get			(index1);
+			var renderType	= sequenceSet	.getRenderType	();
+			var effectType	= sequenceSet	.getEffectType	();
 
-			if (extension1.isAccelerated()) {
-				for (int index = 0, size = sequences.getSequenceKeys().size(); index < size; index ++) {
-					var sequenceOffset	= sequences		.getSequenceOffsets	().getFloat	(index);
-					var sequenceKey 	= sequences		.getSequenceKeys	().get		(index);
-					var hasColor		= sequenceKey	.hasColor			();
-					var textColor		= sequenceKey	.getColor			();
+			var extensionRenderType = (IAcceleratedVertexConsumer) null;
+			var extensionEffectType = (IAcceleratedVertexConsumer) null;
 
-					if (hasColor) {
-						color = FastColorCompat.ARGB32.color(
-										FastColorCompat.ARGB32.alpha	(color),
-								(int) (	FastColorCompat.ARGB32.red	(textColor) * dimFactor),
-								(int) (	FastColorCompat.ARGB32.green	(textColor) * dimFactor),
-								(int) (	FastColorCompat.ARGB32.blue	(textColor) * dimFactor)
-						);
-					} else {
-						color = defaultColor;
-					}
+			for (int index2 = 0, size2 = sequenceSet.getSequences().size(); index2 < size2; index2 ++) {
+				var sequence		= sequenceSet.getSequences().get			(index2);
+				var sequenceOffset	= sequence					.sequenceOffset	();
+				var sequenceKey 	= sequence					.sequenceKey	();
+				var effectKey		= sequence					.effectKey		();
+				var hasColor		= sequenceKey				.hasColor		();
+				var textColor		= sequenceKey				.getColor		();
 
-					SCRATCH.set			(transform);
-					SCRATCH.translate	(
-							positionX + sequenceOffset,
-							positionY,
-							0.0f
+				if (hasColor) {
+					color = FastColorCompat.ARGB32.color(
+							FastColorCompat.ARGB32.alpha	(color),
+							(int) (	FastColorCompat.ARGB32.red	(textColor) * dimFactor),
+							(int) (	FastColorCompat.ARGB32.green	(textColor) * dimFactor),
+							(int) (	FastColorCompat.ARGB32.blue	(textColor) * dimFactor)
 					);
+				} else {
+					color = defaultColor;
+				}
 
-					extension1.doRender(
+				SCRATCH.set			(transform);
+				SCRATCH.translate	(
+						positionX + sequenceOffset,
+						positionY,
+						0.0f
+				);
+
+				if (extensionRenderType == null) {
+					extensionRenderType = bufferSource.getBuffer(renderType).getAccelerated();
+				}
+
+				if (extensionRenderType.isAccelerated()) {
+					extensionRenderType.doRender(
 							AcceleratedStyledSequenceRenderer.INSTANCE,
 							sequenceKey,
 							SCRATCH,
@@ -157,29 +169,43 @@ public class ComponentMesh {
 							OverlayTexture.NO_OVERLAY,
 							color
 					);
+				} else {
+					AcceleratedStyledSequenceRenderer.INSTANCE.buildSequenceMesh(
+							bufferSource.getBuffer(renderType),
+							sequenceKey,
+							SCRATCH,
+							color,
+							packedLight
+					);
+				}
 
-					if (		sequenceKey.isStrikethrough	()
-							||	sequenceKey.isUnderlined	()
-					) {
-						var extension2 = bufferSource.getBuffer(mcFont.getFontSet(sequenceKey.getFont()).whiteGlyph().renderType(mode)).getAccelerated();
+				if (		effectKey.isUnderlined		()
+						||	effectKey.isStrikethrough	()
+				) {
+					if (extensionEffectType == null) {
+						extensionEffectType = bufferSource.getBuffer(effectType).getAccelerated();
+					}
 
-						if (extension2.isAccelerated()) {
-							extension2.doRender(
-									AcceleratedSequenceEffectRenderer.INSTANCE,
-									sequenceKey,
-									SCRATCH,
-									NORMAL,
-									packedLight,
-									OverlayTexture.NO_OVERLAY,
-									color
-							);
-						} else {
-							throw new IllegalStateException("Someone uses incorrect render type in the baked glyph.");
-						}
+					if (extensionEffectType.isAccelerated()) {
+						extensionEffectType.doRender(
+								AcceleratedSequenceEffectRenderer.INSTANCE,
+								effectKey,
+								SCRATCH,
+								NORMAL,
+								packedLight,
+								OverlayTexture.NO_OVERLAY,
+								color
+						);
+					} else {
+						AcceleratedSequenceEffectRenderer.INSTANCE.buildSequenceMesh(
+								bufferSource.getBuffer(effectType),
+								effectKey,
+								SCRATCH,
+								color,
+								packedLight
+						);
 					}
 				}
-			} else {
-				throw new IllegalStateException("Someone uses incorrect render type in the baked glyph.");
 			}
 		}
 
@@ -187,18 +213,24 @@ public class ComponentMesh {
 	}
 
 	@Getter
-	private static class Sequences {
+	private static class SequenceSet {
 
-		private final FloatList					sequenceOffsets;
-		private final ObjectList<ISequenceKey>	sequenceKeys;
-		private final ObjectList<ISequenceKey>	effectKeys;
+		private final ObjectList<Sequence>		sequences;
 		private final RenderType				renderType;
+		private final RenderType				effectType;
 
-		public Sequences(RenderType renderType) {
-			this.sequenceOffsets	= new FloatArrayList	();
-			this.sequenceKeys		= new ObjectArrayList<>	();
-			this.effectKeys			= new ObjectArrayList<>	();
-			this.renderType			= renderType;
+		public SequenceSet(RenderType renderType, RenderType effectType) {
+			this.sequences	= new ObjectArrayList<>();
+			this.renderType	= renderType;
+			this.effectType	= effectType;
+		}
+
+		public record Sequence(
+				float			sequenceOffset,
+				ISequenceKey	sequenceKey,
+				ISequenceKey	effectKey
+		) {
+
 		}
 	}
 
@@ -212,52 +244,43 @@ public class ComponentMesh {
 
 	public static class Builder {
 
-		private final	Map	<RenderType, Sequences>	sequences;
-		private final	List<Obfuscated>			obfuscatedGlyphs;
-		private			float						advance;
+		private final	Map	<Key, SequenceSet>	sequenceSetsByKey;
+		private final	List<SequenceSet>		sequenceSetsByIdx;
+		private final	List<Obfuscated>		obfuscatedGlyphs;
+		private			float					advance;
 
 		public Builder() {
-			this.sequences			= new Object2ObjectArrayMap	<>();
-			this.obfuscatedGlyphs	= new ObjectArrayList		<>();
+			this.sequenceSetsByKey	= new Object2ObjectOpenHashMap	<>();
+			this.sequenceSetsByIdx	= new ObjectArrayList			<>();
+			this.obfuscatedGlyphs	= new ObjectArrayList			<>();
 			this.advance			= 0.0f;
 		}
 
 		public void addSequence(
 				ISequenceKey	sequenceKey,
 				RenderType		renderType,
+				RenderType		effectType,
 				float			offset
 		) {
-			var sequence = this.sequences.get(renderType);
+			var key = new Key(
+					renderType,
+					effectType
+			);
+
+			var sequence = this.sequenceSetsByKey.get(key);
 
 			if (sequence == null) {
-				sequence = new Sequences(renderType);
+				sequence = new SequenceSet(renderType, effectType);
 
-				sequences.put(renderType, sequence);
+				sequenceSetsByKey.put(key,	sequence);
+				sequenceSetsByIdx.add(		sequence);
 			}
 
-			sequence.effectKeys		.add(AcceleratedSequenceEffectRenderer.INSTANCE.getIndexKey(sequenceKey));
-			sequence.sequenceKeys	.add(AcceleratedStyledSequenceRenderer.INSTANCE.getIndexKey(sequenceKey));
-			sequence.sequenceOffsets.add(offset);
-		}
-
-		public void addMesh(ComponentMesh that) {
-			for (var entry : that.sequences.entrySet()) {
-				var thatRenderType	= entry				.getKey();
-				var thatSequence	= entry				.getValue();
-				var thisSequence	= this.sequences	.get(thatRenderType);
-
-				if (thisSequence == null) {
-					thisSequence = new Sequences(thatRenderType);
-
-					sequences.put(thatRenderType, thisSequence);
-				}
-
-				thisSequence.effectKeys		.addAll(thatSequence.effectKeys);
-				thisSequence.sequenceKeys	.addAll(thatSequence.sequenceKeys);
-				thisSequence.sequenceOffsets.addAll(thatSequence.sequenceOffsets);
-			}
-
-			this.obfuscatedGlyphs.addAll(that.obfuscatedGlyphs);
+			sequence.sequences.add(new SequenceSet.Sequence(
+					offset,
+					AcceleratedStyledSequenceRenderer.INSTANCE.getIndexKey(sequenceKey),
+					AcceleratedSequenceEffectRenderer.INSTANCE.getIndexKey(sequenceKey)
+			));
 		}
 
 		public void addObfuscated(
@@ -278,11 +301,18 @@ public class ComponentMesh {
 
 		public ComponentMesh build(boolean shadow) {
 			return new ComponentMesh(
-					this.sequences,
+					this.sequenceSetsByIdx,
 					this.obfuscatedGlyphs,
 					this.advance,
 					shadow
 			);
+		}
+
+		private record Key(
+				RenderType sequence,
+				RenderType effect
+		) {
+
 		}
 	}
 }
