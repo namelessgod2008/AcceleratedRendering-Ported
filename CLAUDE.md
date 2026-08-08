@@ -73,6 +73,7 @@ javap -p -c net/irisshaders/iris/mixin/fabric/MixinLevelRenderer.class
 - **构建工具**：Gradle + `fabric-loom-remap` 1.17-SNAPSHOT（remapJar 静态重映射 mixin 注解，无 refMap）
 - **关键依赖**：Fabric API 0.119.4+1.21.4, ForgeConfigAPIPort 21.4.3, ModMenu 13.0.3, NeoForge Event Bus 8.0.5 (`include implementation`), Lombok 1.18.40, mixinconstraints 1.0.9。`repositories` 中包含 `mavenCentral()`（forgeconfigapiport compat 需要，见 Pitfall #4l）
 - **modCompileOnly**：Sodium mc1.21.4-0.6.13, Iris 1.8.8+1.21.4, ModernUI 3.12.0.3, GeckoLib 4.8, EMF 3.2.4, ImmediatelyFast 1.3.4, Trinkets-canary 3.10.0-1.21.4, TouhouLittleMaid-orihime 0.8.2, FTB Library (curse 7312255), Axiom, MaLiLib, TweakerMore
+- **生产环境关键 mod**：Sodium 0.6.13, Iris 1.8.8, C2ME（始终存在，含 night-config 3.6.5）, Continuity（EmissiveBakedModel 包装器）, DistantHorizons（含旧版 night-config）, CustomSkinLoader（render-patch on CapeLayer + PlayerTabOverlay）
 - **Access widener**：`src/main/resources/acceleratedrendering.accesswidener`（v2 named）
 - **Mixin JSON**：18 个存在于 resources；**10 个**注册于 `fabric.mod.json` → `mixins` 数组（core、entities、items、modelparts、text、filter、compat.vanilla、compat.iris、compat.immediatelyfast、feature.modernui）；其余 8 个未注册（create、entitymodelfeature、ftb、geckolib、touhoulittlemaid、sophisticated、trinkets、tweakmore）
 - **processResources**：`filesMatching("fabric.mod.json") { expand replaceProperties }` — fabric.mod.json 用 `${mod_id}` 等占位符，必须展开完整映射（只 expand version 会报 `Missing property (mod_id)`）
@@ -226,6 +227,16 @@ Xaero 小地图/世界地图在 Tweakeroo 灵魂出窍关闭瞬间调用 `GuiGra
 - `priority=999` 确保回调在 Sodium 默认 priority=1000 之前执行——必须先加速再让 Sodium 处理
 - 生产环境 `fabric-loom-remap` 不会影响 `priority` 属性（已验证：`RuntimeInvisibleAnnotations: priority=999`）
 
+**⚠️ 物品渲染调用链澄清（ItemRenderType.LAYER vs SIMPLE）**：
+- `ItemStackRenderState.render()` 内部遍历 layers，对每个 layer 调用 `ItemRenderType.render()`
+- **ItemRenderType.LAYER** → 调用 `LayerRenderState.render()` → 内部调用 `ItemRenderer.renderItem()`（invokestatic）→ 我们的 `@Inject` 在 `renderItem` HEAD 拦截到
+- **ItemRenderType.SIMPLE** → 调用自己的渲染逻辑，**不经过** `ItemRenderer.renderItem()` → 我们的注入点不会触发
+- GUI 物品渲染同样经过 `ItemStackRenderState.render()` → `ItemRenderType.render()`（或 `renderInGui()`）
+- 因此：我们的物品加速仅对 **LAYER 类型** 的物品生效；SIMPLE 类型（如 2D 平面物品、某些 GUI 专用渲染）走原版路径
+
+**⚠️ Continuity EmissiveBakedModel 包装链**：
+Continuity mod 会在模型外层包裹 `EmissiveBakedModel`，该 wrapper 实现了 `BakedModel` 但**不实现** `IAcceleratedBakedModel`。当 `ItemRendererMixin` 的 `instanceof IAcceleratedBakedModel` 检查遇到被 Continuity 包装的模型时，检查失败 → 物品走原版渲染。详见 Pitfall #4m。
+
 ### 4k. ✅ 已修复：GuiBatchingController `depthLayers` 空指针（2026-07-29）
 
 **症状**：生产环境 `simpleshulkerpreview` mod 通过 REI 触发 `GuiGraphics.fill()` 时，`GuiBatchingController.submitFill()` 在 `depthLayers.lastEntry().getKey()` 处 NPE 崩溃。
@@ -233,6 +244,8 @@ Xaero 小地图/世界地图在 Tweakeroo 灵魂出窍关闭瞬间调用 `GuiGra
 **根因**：`submitFill()` 和 `submitGradient()` 在处理无 depth 的 RenderType 时，假设 `depthLayers` 已包含至少一层。但当首个 fill 调用触发时，`depthLayers` 为空 → `lastEntry()` 返回 null → NPE。
 
 **修复**（`GuiBatchingController.java`）：两个方法在访问 `lastEntry()` 前添加 `depthLayers.isEmpty()` 守卫——空时创建首层并直接添加 fill/gradient context。
+
+**⚠️ 设备依赖性**：此 NPE 在多数设备上不触发，因为正常的 GUI 渲染流程中首个调用通常是 `submitBlit`（会初始化 `depthLayers`）。只有在特定 GPU/驱动组合 + 特定 mod 调用顺序下，首个调用才会是 `submitFill` 且 `depthLayers` 为空。`simpleshulkerpreview` 恰好触发了此边缘情况。
 
 ### 4l. ✅ 已修复：forgeconfigapiport 配置保存崩溃（C2ME night-config 冲突，2026-07-29）
 
@@ -250,6 +263,35 @@ Xaero 小地图/世界地图在 Tweakeroo 灵魂出窍关闭瞬间调用 `GuiGra
 - 在 build.gradle 中 `include("com.electronwill.night-config:core:3.8.1")` → Fabric Loader 仍加载 3.6.5
 - 删除 `.fabric/processedMods` → 3.6.5 被重新提取
 - `include implementation` night-config 到自己 JAR → 类加载器仍优先加载 C2ME 版本
+
+### 4m. ⚠️ Continuity EmissiveBakedModel 包装导致物品加速跳过（2026-07-29 发现）
+
+Continuity mod 通过 mixin 将模型包裹在 `EmissiveBakedModel` 中（自定义 BakedModel 实现），该包装器：
+- 实现了 `BakedModel` 接口
+- **不实现** `IAcceleratedBakedModel` 接口
+- 在 `ItemRenderer.renderItem()` 被调用时，传入的 `BakedModel` 参数可能已被 Continuity 的 mixin 替换为 `EmissiveBakedModel`
+
+**影响**：`ItemRendererMixin.accelerateAtHead()` 中的 `bakedModel instanceof IAcceleratedBakedModel accelModel` 检查失败 → `isAccelerated()` 路径被跳过 → 回退到 fallback 的 Quad 烘焙渲染（`shouldBakeMeshForQuad()`），或者如果 Quad 烘焙也失败，则走原版渲染。
+
+**当前状态**：尚未修复。可能的方案：
+- 在 `instanceof` 检查前尝试 unwrap Continuity 的包装器（通过反射获取内部 delegate model）
+- 或添加 Continuity compat mixin 让 EmissiveBakedModel 实现 `IAcceleratedBakedModel`
+
+**注意**：此问题只在用户安装了 Continuity mod 的生产环境中出现。
+
+### 4n. ⚠️ CustomSkinLoader (CSL) render-patch 兼容性（2026-07-29 知悉）
+
+CustomSkinLoader 使用 render-patch 技术注入 `CapeLayer` 和 `PlayerTabOverlay`。这意味着 CSL 可能在玩家渲染管线中修改渲染状态或替换模型，可能与我们的实体加速产生交互。当前尚未观察到具体 bug，但需要留意此兼容点。
+
+### 4o. ✅ 已修复：GUI_BATCHING 在单机世界切换后卡住（2026-07-29 知悉）
+
+此前认为 `resetGuiBatching` 仅在多人游戏中需要（离开服务器后屏幕过渡），但实际单机游戏进出世界也会触发相同问题。`LevelRendererMixin.startRenderLevel()` 中的防御性 `resetGuiBatching` 在单机和多人游戏都生效——每次 `renderLevel` 开始前都会清理残留的 GUI_BATCHING 状态。
+
+### 4p. MaLiLib + processResources 交互（2026-07-29 知悉）
+
+MaLiLib 及其衍生 mod（Tweakeroo、MiniHUD 等）使用 build-time JSON minification（在构建时移除 JSON 注释和空白字符）。如果我们的 `processResources` 配置不当（如 expand 重写 fabric.mod.json 的时机），可能与 MalilLib 的 JSON 处理产生交互。当前已确认 `processResources` 使用 `filesMatching("fabric.mod.json") { expand replaceProperties }` 会展开所有占位符，如果在 MalilLib 相关 mod 之前执行则无冲突。
+
+**注意**：`processResources` 输出 warning "Overlapping outputs with mod" 是正常的——Gradle 在 expand 时临时创建重叠输出，Loom 最终会处理 remap。
 
 ### 5. 渲染上下文检查至关重要
 每个加速 mixin 都必须检查渲染上下文：
@@ -317,7 +359,16 @@ Xaero 小地图/世界地图在 Tweakeroo 灵魂出窍关闭瞬间调用 `GuiGra
 - 使用 `list.unwrap()` 在 `checkAll()` 中遍历条目
 
 ### 19. 使用 TAB 缩进的文件
-许多 `.java` 文件使用 TAB 缩进。**在 Windows 上避免在 `sed` 的替换文本中使用 `\n` 或 `\t`** — 它会插入字面字符而非转义序列。使用 Edit 工具进行精确替换。
+许多 `.java` 文件使用 TAB 缩进。**在 Windows 上避免在 `sed` 的替换文本中使用 `\n` 或 `\t`** — 它会插入字面字符而非转义序列。
+
+**⚠️ Claude Code Edit 工具与 TAB**：Claude Code 内置的 Edit 工具在处理含 TAB 字符的文件时经常匹配失败（TAB 在渲染时被规范化或转义）。遇到 Edit 工具连续失败的情况，改用 **Python 脚本** 进行精确替换。示例：
+```python
+import pathlib
+content = pathlib.Path("file.java").read_text()
+content = content.replace("old\ttext", "new\ttext")  # 精确匹配 TAB
+pathlib.Path("file.java").write_text(content)
+```
+
 
 ---
 
@@ -372,6 +423,9 @@ Xaero 小地图/世界地图在 Tweakeroo 灵魂出窍关闭瞬间调用 `GuiGra
 | **Iris 兼容** | ✅ 正常工作 | `vanilla.LevelRendererMixin` 已更新至 `method_62214`（14 参数）；注入点已对照字节码验证 |
 | **ImmediatelyFast 兼容** | ⚠️ @Pseudo | 尚未针对 1.21.4 验证 |
 | **ModernUI 兼容** | ✅ 正常工作 | 已更新至 ModernUI 3.12.0.3：`drawText` 序号 + `@Local(index)`，`drawUnderline`/`drawStrikethrough` 签名 + boolean 参数，`MUIStringDrawContext` 中的 `isSdf`。**编译依赖必须锁定 3.12.0.3**（#4d） |
+| **Continuity 兼容** | ⚠️ 已知问题 | EmissiveBakedModel 包装导致物品加速跳过（`instanceof IAcceleratedBakedModel` 失败）。见 Pitfall #4m。 |
+| **CustomSkinLoader 兼容** | ⚠️ 需留意 | CSL render-patch 注入 `CapeLayer`/`PlayerTabOverlay`，可能影响实体渲染。尚未观察到具体 bug。见 Pitfall #4n。 |
+| **C2ME 兼容** | ✅ 正常 | C2ME 始终存在于生产环境。`LoadedConfigMixin` 的 night-config 降级 fix 始终生效。见 Pitfall #4l。 |
 
 ---
 
@@ -384,8 +438,10 @@ Xaero 小地图/世界地图在 Tweakeroo 灵魂出窍关闭瞬间调用 `GuiGra
 - 回调签名：`(ItemDisplayContext, PoseStack, MultiBufferSource, int, int, int[], BakedModel, RenderType, FoilType, CallbackInfo)` — 匹配 renderItem 的 9 参签名
 - 检查 `isRenderingLevel()` + `foilType == NONE` + `isAccelerated()` — 全部通过才 `ci.cancel()` 并执行 GPU 渲染
 - 附魔物品（`foilType != NONE`）直接返回，让原版处理（加速管线不支持 VertexMultiConsumer 箔片包裹）
-- `renderItem` 方法调用链：`ItemStackRenderState.render()` → `LayerRenderState.render()` → `ItemRenderer.renderItem()`（via invokestatic）
+- **调用链**：`ItemStackRenderState.render()` → `ItemRenderType.render()` →（LAYER 类型）→ `LayerRenderState.render()` → `ItemRenderer.renderItem()`（invokestatic @ HEAD 被拦截）
+- **ItemRenderType.SIMPLE** 不经过 `ItemRenderer.renderItem()` → 我们的注入点不触发 → SIMPLE 类型物品走原版渲染
 - **不再使用 `@WrapOperation`**，因为 Sodium FRAPI 用 `@Inject(cancellable=true)` 取消方法体后，任何方法体内的 INVOKE 包装器都无法触发。详见 Pitfall #4j。
+- **Continuity 包装**：`EmissiveBakedModel` 包裹模型 → `instanceof IAcceleratedBakedModel` 失败 → fallback 到 Quad 烘焙渲染。详见 Pitfall #4m。
 
 ### BakedGlyphMixin（1.21.4）
 - `render(boolean, float, float, Matrix4f, VertexConsumer, int, boolean, int)` = `(italic, x, y, matrix, buffer, color, bold, packedLight)`

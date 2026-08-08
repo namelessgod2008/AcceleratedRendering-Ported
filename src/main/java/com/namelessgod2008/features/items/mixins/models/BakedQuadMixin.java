@@ -13,6 +13,7 @@ import com.namelessgod2008.features.items.IAcceleratedBakedQuad;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenCustomHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.core.Direction;
 import net.neoforged.neoforge.client.model.IQuadTransformer;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
@@ -32,6 +33,8 @@ public abstract class BakedQuadMixin implements IAcceleratedBakedQuad {
 	@Shadow @Final protected		int[]									vertices;
 
 	@Shadow public abstract			boolean									isTinted();
+
+	@Shadow public abstract			Direction								getDirection();
 
 	@Unique
 	@Override
@@ -77,6 +80,21 @@ public abstract class BakedQuadMixin implements IAcceleratedBakedQuad {
 			var normalOffset	= vertexOffset	+ IQuadTransformer.NORMAL;
 			var packedNormal	= vertices[normalOffset];
 
+			var normalX = ((byte) (	packedNormal		& 0xFF)) / 127.0f;
+			var normalY = ((byte) ((	packedNormal >> 8)	& 0xFF)) / 127.0f;
+			var normalZ = ((byte) ((	packedNormal >> 16)	& 0xFF)) / 127.0f;
+
+			// 1.21.4 item model quads often carry a zero packed normal (vanilla falls back to
+			// quad.getDirection() in ItemRenderer). SimpleBakedModelMixin already does this
+			// fallback; mirror it here for the bake_mesh_for_quads (dynamic quad) path.
+			// otherwise a (0,0,0) normal bakes into the cached mesh and kills directional
+			// diffuse lighting (all six faces render equally bright).
+			if (normalX == 0 && normalY == 0 && normalZ == 0) {
+				normalX = getDirection	().getStepX	();
+				normalY = getDirection	().getStepY	();
+				normalZ = getDirection	().getStepZ	();
+			}
+
 			meshBuilder.addVertex(
 					Float			.intBitsToFloat	(vertices[posOffset + 0]),
 					Float			.intBitsToFloat	(vertices[posOffset + 1]),
@@ -86,9 +104,9 @@ public abstract class BakedQuadMixin implements IAcceleratedBakedQuad {
 					Float			.intBitsToFloat	(vertices[uv0Offset + 1]),
 					combinedOverlay,
 					vertices[uv2Offset],
-					((byte) (	packedNormal		& 0xFF)) / 127.0f,
-					((byte) ((	packedNormal >> 8)	& 0xFF)) / 127.0f,
-					((byte) ((	packedNormal >> 16)	& 0xFF)) / 127.0f
+					normalX,
+					normalY,
+					normalZ
 			);
 		}
 

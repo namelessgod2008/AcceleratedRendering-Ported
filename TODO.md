@@ -72,6 +72,8 @@
 | Mod | 原因 | 修复难度 |
 |-----|--------|----------------|
 | **Iris Shaders** | ✅ Iris 1.8.8 兼容：`vanilla.LevelRendererMixin` 已更新 `renderLevel`→`method_62214`。需要运行时验证。 | — |
+| **Continuity** | EmissiveBakedModel 包装导致 `instanceof IAcceleratedBakedModel` 失败，物品加速跳过。需 unwrap 或 compat mixin。见 CLAUDE.md Pitfall #4m。 | 🟡 中等 |
+| **CustomSkinLoader** | Render-patch 注入 CapeLayer/PlayerTabOverlay，可能影响实体渲染。尚未观察到具体 bug。见 CLAUDE.md Pitfall #4n。 | 🟢 低 |
 | **ImmediatelyFast** | IF 1.3.4+1.21.4 可用，但 mixin 目标指向 ImmediatelyFast 内部 | 🟡 中等 |
 | **Create** | 所有代码已注释；需要 `PartialItemModelRenderer` API 更新 | 🟡 中等 |
 | **Entity Model Features (EMF)** | `EMFModelPartMixin.java.disabled`；API 未验证 | 🟢 低 |
