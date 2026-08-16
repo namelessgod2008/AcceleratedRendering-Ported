@@ -5,6 +5,7 @@
   "package": "com.namelessgod2008.compat.vanilla.mixins",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "BannerRendererMixin",
     "HumanoidArmorLayerMixin",
     "LivingEntityRendererMixin"
   ],

@@ -9,6 +9,7 @@ import com.namelessgod2008.core.buffers.accelerated.builders.VertexConsumerExten
 import com.namelessgod2008.core.buffers.accelerated.layers.LayerDrawType;
 import com.namelessgod2008.core.utils.PoseStackExtension;
 import com.namelessgod2008.core.utils.RenderTypeUtils;
+import com.namelessgod2008.features.filter.ItemStackFilterStack;
 import com.namelessgod2008.features.items.AcceleratedItemRenderingFeature;
 import com.namelessgod2008.features.items.gui.contexts.*;
 import com.namelessgod2008.features.items.gui.contexts.string.IStringDrawContext;
@@ -54,8 +55,8 @@ public class GuiBatchingController {
 	private			final	List<FillDrawContext>			fillDrawContexts;
 	private			final	List<HighlightDrawContext>		highlightDrawContexts;
 	private			final	List<GradientDrawContext>		gradientDrawContexts;
-	private			final	List<ItemRenderContext>			flatItemDrawContexts;
-	private			final	List<ItemRenderContext>			blockItemDrawContexts;
+	private			final	List<ItemDrawContext>			flatItemDrawContexts;
+	private			final	List<ItemDrawContext>			blockItemDrawContexts;
 	private			final	Float2ReferenceSortedMap<Layer>	depthLayers;
 
 	private GuiBatchingController() {
@@ -122,7 +123,8 @@ public class GuiBatchingController {
 				offset = layerDepth + depth;
 			}
 
-			for (var context : blitDrawContexts) {
+			for (int index = 0, size = blitDrawContexts.size(); index < size; index ++) {
+					var context = blitDrawContexts.get(index);
 var extension = graphics.bufferSource.getBuffer(context.renderTypeGetter() != null ? context.renderTypeGetter().apply(context.atlasLocation()) : GuiRenderTypes.blit(context.atlasLocation())).getAccelerated();
 
 				if (extension.isAccelerated()) {
@@ -138,7 +140,8 @@ var extension = graphics.bufferSource.getBuffer(context.renderTypeGetter() != nu
 				}
 			}
 
-			for (var context : fillDrawContexts) {
+			for (int index = 0, size = fillDrawContexts.size(); index < size; index ++) {
+					var context = fillDrawContexts.get(index);
 var extension = graphics.bufferSource.getBuffer(context.renderType()).getAccelerated();
 
 				if (extension.isAccelerated()) {
@@ -154,7 +157,8 @@ var extension = graphics.bufferSource.getBuffer(context.renderType()).getAcceler
 				}
 			}
 
-			for (var context : gradientDrawContexts) {
+			for (int index = 0, size = gradientDrawContexts.size(); index < size; index ++) {
+					var context = gradientDrawContexts.get(index);
 var extension = graphics.bufferSource.getBuffer(context.renderType()).getAccelerated();
 
 				if (extension.isAccelerated()) {
@@ -170,8 +174,8 @@ var extension = graphics.bufferSource.getBuffer(context.renderType()).getAcceler
 				}
 			}
 
-			for (var context : stringDrawContexts) {
-context.drawString(graphics.bufferSource);
+			for (int index = 0, size = stringDrawContexts.size(); index < size; index ++) {
+					stringDrawContexts.get(index).drawString(graphics.bufferSource);
 			}
 
 			scissorFlush.record	(graphics);
@@ -328,7 +332,7 @@ context.drawString(graphics.bufferSource);
 				0.0f
 		));
 
-		var context = new ItemRenderContext(
+		var context = new ItemDrawContext(
 				new Matrix4f(transform),
 				new Matrix3f(normal),
 				itemStack,
@@ -594,14 +598,19 @@ context.drawString(graphics.bufferSource);
 		return layer;
 	}
 
-	private void renderItemContexts(net.minecraft.client.renderer.item.ItemModelResolver resolver, GuiGraphics graphics, com.mojang.blaze3d.vertex.PoseStack poseStack, List<ItemRenderContext> contexts) {
+	private void renderItemContexts(net.minecraft.client.renderer.item.ItemModelResolver resolver, GuiGraphics graphics, com.mojang.blaze3d.vertex.PoseStack poseStack, List<ItemDrawContext> contexts) {
 		for (var context : contexts) {
 			var state = new net.minecraft.client.renderer.item.ItemStackRenderState();
-			resolver.updateForTopItem(state, context.itemStack(), context.displayContext(), context.leftHand(), null, null, 0);
-			poseStack.pushPose();
-			poseStack.setPose(context.transform(), context.normal());
-			state.render(poseStack, graphics.bufferSource, context.combinedLight(), context.combinedOverlay());
-			poseStack.popPose();
+			ItemStackFilterStack.push(context.itemStack());
+			try {
+				resolver.updateForTopItem(state, context.itemStack(), context.displayContext(), context.leftHand(), null, null, 0);
+				poseStack.pushPose();
+				poseStack.setPose(context.transform(), context.normal());
+				state.render(poseStack, graphics.bufferSource, context.combinedLight(), context.combinedOverlay());
+				poseStack.popPose();
+			} finally {
+				ItemStackFilterStack.pop();
+			}
 		}
 	}
 
@@ -635,7 +644,10 @@ context.drawString(graphics.bufferSource);
 
 		public void add(IGuiElementContext context) {
 			layerElements.add(context);
-			layerThickness = Math.max(layerThickness, context.thickness());
+
+			if (layerThickness < context.thickness()) {
+				layerThickness = context.thickness();
+			}
 		}
 	}
 }

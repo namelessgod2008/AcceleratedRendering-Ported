@@ -418,6 +418,7 @@ pathlib.Path("file.java").write_text(content)
 | **GUI 物品栏高亮批处理** | ✅ 正常工作 | `@WrapOperation` 在 `blitSprite` INVOKE 上；`sprites.getSprite()` → `submitBlit()` 带 `renderTypeGetter` 参数；AW：`GuiGraphics.sprites` + `GuiSpriteManager.getSprite` |
 | **方块实体过滤器** | ✅ 正常工作 | 已更新至 1.21.4 `render(E, float, PoseStack, MultiBufferSource)`；`tryRender` 已移除 |
 | **实体过滤器** | ✅ 正常工作 | 已更新以目标 `renderEntities`（private）；`renderEntity` 仍以相同签名存在 |
+| **物品过滤器** | ✅ 正常工作 | **1.21.4 新方案 (2026-08-16)**：`filter.ItemRendererMixin` 在 static `renderItem` HEAD/RETURN 注入，`ItemModelResolverMixin` + `ItemStackFilterStack`（ThreadLocal）捕获 ItemStack。上游 1.21.1 的 `@WrapMethod(ItemRenderer.render)` 在 1.21.4 不存在。见 [[upstream-af6b560-port]] |
 | **物品栏实体渲染** | ✅ 正常工作 | `method_64045` 替代已移除的 `method_29977` |
 | **LivingEntityRenderer/HumanoidArmorLayer** | ✅ 正常工作 | 已更新至 1.21.4 实体渲染状态 API；EquipmentLayerRenderer 替代 renderTrim |
 | **Iris 兼容** | ✅ 正常工作 | `vanilla.LevelRendererMixin` 已更新至 `method_62214`（14 参数）；注入点已对照字节码验证 |

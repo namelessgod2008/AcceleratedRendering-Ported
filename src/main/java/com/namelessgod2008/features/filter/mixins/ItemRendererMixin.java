@@ -1,68 +1,96 @@
 package com.namelessgod2008.features.filter.mixins;
 
-import com.namelessgod2008.core.CoreFeature;
 import com.namelessgod2008.features.entities.AcceleratedEntityRenderingFeature;
 import com.namelessgod2008.features.filter.FilterFeature;
+import com.namelessgod2008.features.filter.ItemStackFilterStack;
 import com.namelessgod2008.features.items.AcceleratedItemRenderingFeature;
 import com.namelessgod2008.features.text.AcceleratedTextRenderingFeature;
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.ItemRenderer;
+import net.minecraft.client.renderer.item.ItemStackRenderState;
 import net.minecraft.client.resources.model.BakedModel;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemDisplayContext;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(
-		value		= ItemRenderer.class,
-		priority	= 1001
-)
+/**
+ * 1.21.4 item filter.
+ *
+ * The 1.21.1 upstream used @WrapMethod on ItemRenderer.render(ItemStack, ...)
+ * which no longer exists in 1.21.4. Instead we inject at renderItem HEAD/RETURN
+ * (the static entry that all world-item rendering funnels through) and read the
+ * currently-rendered ItemStack from {@link ItemStackFilterStack}, populated by
+ * ItemModelResolverMixin (world) and GuiBatchingController.renderItemContexts
+ * (batched GUI).
+ *
+ * When the stack fails the filter test (should be excluded from acceleration),
+ * switch the entity/item/text pipelines to vanilla for the duration of the
+ * draw call.
+ */
+@Mixin(ItemRenderer.class)
 public class ItemRendererMixin {
 
-// TODO 1.21.4: 	@WrapOperation(
-// TODO 1.21.4: 			method	= "render",
-// TODO 1.21.4: 			at		= @At(
-// TODO 1.21.4: 					value	= "INVOKE",
-// TODO 1.21.4: 					target	= "Lnet/minecraft/client/renderer/entity/ItemRenderer;renderModelLists(Lnet/minecraft/client/resources/model/BakedModel;Lnet/minecraft/world/item/ItemStack;IILcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;)V"
-// TODO 1.21.4: 			)
-// TODO 1.21.4: 	)
-	public void filterItem(
-			ItemRenderer	instance,
-			BakedModel		bakedModel,
-			ItemStack		itemStack,
-			int				stack,
-			int				combinedLight,
-			PoseStack		combinedOverlay,
-			VertexConsumer	poseStack,
-			Operation<Void>	original
+	@Inject(method = "renderItem", at = @At("HEAD"))
+	private static void startFilter(
+			ItemDisplayContext displayContext,
+			PoseStack poseStack,
+			MultiBufferSource bufferSource,
+			int packedLight,
+			int packedOverlay,
+			int[] tintLayers,
+			BakedModel bakedModel,
+			RenderType renderType,
+			ItemStackRenderState.FoilType foilType,
+			CallbackInfo ci
 	) {
-		var pass =	!	CoreFeature		.isLoaded			()
-				||	!	FilterFeature	.isEnabled			()
-				||	!	FilterFeature	.shouldFilterItems	()
-				||		FilterFeature	.testItem			(itemStack);
-
-		if (!pass) {
-			AcceleratedEntityRenderingFeature	.useVanillaPipeline();
-			AcceleratedItemRenderingFeature		.useVanillaPipeline();
-			AcceleratedTextRenderingFeature		.useVanillaPipeline();
+		if (		!FilterFeature.isEnabled			()
+				||	!FilterFeature.shouldFilterItems	()
+		) {
+			return;
 		}
 
-		original.call(
-				instance,
-				bakedModel,
-				itemStack,
-				stack,
-				combinedLight,
-				combinedOverlay,
-				poseStack
-		);
+		var itemStack = ItemStackFilterStack.peek();
 
-		if (!pass) {
-			AcceleratedEntityRenderingFeature	.resetPipeline();
-			AcceleratedItemRenderingFeature		.resetPipeline();
-			AcceleratedTextRenderingFeature		.resetPipeline();
+		if (itemStack.isEmpty() || FilterFeature.testItem(itemStack)) {
+			return;
 		}
+
+		AcceleratedEntityRenderingFeature.useVanillaPipeline();
+		AcceleratedItemRenderingFeature.useVanillaPipeline();
+		AcceleratedTextRenderingFeature.useVanillaPipeline();
+	}
+
+	@Inject(method = "renderItem", at = @At("RETURN"))
+	private static void endFilter(
+			ItemDisplayContext displayContext,
+			PoseStack poseStack,
+			MultiBufferSource bufferSource,
+			int packedLight,
+			int packedOverlay,
+			int[] tintLayers,
+			BakedModel bakedModel,
+			RenderType renderType,
+			ItemStackRenderState.FoilType foilType,
+			CallbackInfo ci
+	) {
+		if (		!FilterFeature.isEnabled			()
+				||	!FilterFeature.shouldFilterItems	()
+		) {
+			return;
+		}
+
+		var itemStack = ItemStackFilterStack.peek();
+
+		if (itemStack.isEmpty() || FilterFeature.testItem(itemStack)) {
+			return;
+		}
+
+		AcceleratedEntityRenderingFeature.resetPipeline();
+		AcceleratedItemRenderingFeature.resetPipeline();
+		AcceleratedTextRenderingFeature.resetPipeline();
 	}
 }

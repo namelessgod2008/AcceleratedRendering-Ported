@@ -42,6 +42,7 @@
 | 方块实体过滤 | `filter.BlockEntityRenderDispatcherMixin` | `render(E, float, PoseStack, Buffer)` 上 HEAD/RETURN，带 @Share |
 | 容器过滤 | `filter.AbstractContainerScreenMixin` | 无需 API 变更；此前被 `fabric.mod.json` 中缺失 `filter.mixins.json` 条目所阻塞 |
 | 物品栏实体渲染 | `InventoryScreenMixin` | `method_64045` 替换已移除的 `method_29977`；`remap=false` |
+| 物品过滤 (1.21.4) | `filter.ItemRendererMixin` + `filter.ItemModelResolverMixin` + `ItemStackFilterStack` | **✅ 已实现 (2026-08-16)** — 上游 1.21.1 的 `@WrapMethod(ItemRenderer.render)` 在 1.21.4 不存在（`renderItem` 静态无 ItemStack），改用 ThreadLocal ItemStack 栈方案：`ItemModelResolver.updateForTopItem` push，`renderItem` HEAD 判断 `FilterFeature.testItem`，失败则切换 vanilla pipeline。详见 [[upstream-af6b560-port]]。 |
 | GUI 批处理 (fill/blit/slot) | `gui.GuiGraphicsMixin`、`gui.AbstractContainerScreenMixin`、`gui.GuiMixin` | `flushBatching()` 排除 ENTITY/BLOCK；`innerBlit` 已更新；`Lighting.setupFor3DItems()` 已恢复；`GuiMixin` 仅作用于 `renderItemHotbar` |
 | GUI 物品批处理 | `GuiBatchingController` | `ItemStackRenderState.render()` + `ItemModelResolver.updateForTopItem()` 替换已移除的 `ItemRenderer.render()` |
 | GUI 字体/字符串批处理 | `gui.FontMixin` | `context.drawString()` → `font.drawInBatch()` (10 参)；已重新启用 |
@@ -107,6 +108,7 @@
 | **Sodium 环境下物品加速失效** | 生产环境（含 Sodium 0.6.13）物品加速帧数不变 | ✅ 已修复 (2026-07-29)：`ItemRendererMixin` 从 `@WrapOperation` 改为 `@Inject` 在 `renderItem` HEAD，`priority=999`（高于 Sodium FRAPI）。Pitfall #4j。 |
 | **GuiBatchingController.submitFill NPE** | simpleshulkerpreview + REI 时 `depthLayers.lastEntry()` 空指针崩溃 | ✅ 已修复 (2026-07-29)：添加 `depthLayers.isEmpty()` 守卫。Pitfall #4k。 |
 | **forgeconfigapiport 配置保存崩溃** | Mod Menu 配置关闭时 `NoSuchFieldError: WritingMode.REPLACE_ATOMIC` | ✅ 已修复 (2026-07-29)：新建 `LoadedConfigMixin` 捕获 `NoSuchFieldError` 降级为 `REPLACE`。C2ME 的 night-config 3.6.5 缺少此字段。Pitfall #4l。 |
+| **物品 6 面同亮（动态面缓存）** | 游玩一段时间后物品模型光照异常（旋转时 6 面一样亮） | ✅ 已修复 (2026-08-07)：`BakedQuadMixin.renderFast()` 缺法线 fallback，烘焙 0 法线到缓存 mesh。见 [[bake-quad-mesh-normal-fallback]]。 |
 
 ---
 
