@@ -1,0 +1,45 @@
+#version 460 core
+
+struct Polygon {
+    uint vertex1;
+    uint vertex2;
+    uint vertex3;
+    uint vertex4;
+    uint vertex5;
+    uint vertex6;
+};
+
+layout(local_size_x = 128) in;
+
+layout(binding=6, std430) restrict writeonly buffer PolygonsOut {
+    Polygon polygonsOut[];
+};
+
+layout(binding=0, offset=0) uniform atomic_uint indexCounter;
+
+layout(location=0) uniform uint polygonCount;
+layout(location=1) uniform uint vertexOffset;
+
+void main() {
+    uint index      = gl_GlobalInvocationID.x;
+    uint base       = index * 4u;
+
+    if (index >= polygonCount) {
+        return;
+    }
+
+    uint index1     = vertexOffset + base + 0u;
+    uint index2     = vertexOffset + base + 1u;
+    uint index3     = vertexOffset + base + 2u;
+    uint index4     = vertexOffset + base + 3u;
+
+    atomicCounterAdd(indexCounter, 6u);
+
+    polygonsOut[index].vertex1 = index1;
+    polygonsOut[index].vertex2 = index2;
+    polygonsOut[index].vertex3 = index3;
+
+    polygonsOut[index].vertex4 = index3;
+    polygonsOut[index].vertex5 = index4;
+    polygonsOut[index].vertex6 = index1;
+}

@@ -1,0 +1,23 @@
+{
+  "required": true,
+  "refmap": "acceleratedrendering-refmap.json",
+  "minVersion": "0.8",
+  "package": "com.namelessgod2008.features.text.mixins",
+  "plugin": "com.namelessgod2008.features.text.mixins.ARTextFeatureMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "BakedGlyphEffectMixin",
+    "BakedGlyphMixin",
+    "ClientLanguageMixin",
+    "CoreReloadsMixin",
+    "FontMixin",
+    "FormattedText$2Mixin",
+    "FormattedText$3Mixin",
+    "LineComponentMixin",
+    "MutableComponentMixin",
+    "StringRenderOutputMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

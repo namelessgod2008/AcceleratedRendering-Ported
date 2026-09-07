@@ -1,0 +1,20 @@
+package com.namelessgod2008.core.buffers.accelerated.layers.storage;
+
+import com.namelessgod2008.core.buffers.accelerated.layers.storage.sorted.SortedLayerStorage;
+
+public enum LayerStorageType {
+
+	SORTED,
+	SEPARATED;
+
+	public ILayerStorage create(int size) {
+		return create(this, size);
+	}
+
+	public static ILayerStorage create(LayerStorageType type, int size) {
+		return switch (type) {
+			case SORTED		-> new SortedLayerStorage	(size);
+			case SEPARATED	-> new SeparatedLayerStorage(size);
+		};
+	}
+}

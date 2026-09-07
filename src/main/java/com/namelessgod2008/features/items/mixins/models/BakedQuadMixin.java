@@ -1,0 +1,144 @@
+package com.namelessgod2008.features.items.mixins.models;
+
+import com.namelessgod2008.core.CoreFeature;
+import com.namelessgod2008.core.buffers.accelerated.builders.IAcceleratedVertexConsumer;
+import com.namelessgod2008.core.buffers.accelerated.builders.IBufferGraph;
+import com.namelessgod2008.core.meshes.IMesh;
+import com.namelessgod2008.core.meshes.collectors.CulledMeshCollector;
+import com.namelessgod2008.core.meshes.data.MeshData;
+import com.namelessgod2008.core.utils.FastColorUtils;
+import com.namelessgod2008.core.utils.IntArrayHashStrategy;
+import com.namelessgod2008.features.entities.AcceleratedEntityRenderingFeature;
+import com.namelessgod2008.features.items.IAcceleratedBakedQuad;
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenCustomHashMap;
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
+import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.core.Direction;
+import net.neoforged.neoforge.client.model.IQuadTransformer;
+import org.joml.Matrix3f;
+import org.joml.Matrix4f;
+import org.spongepowered.asm.mixin.Final;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
+
+import java.util.Map;
+
+@Mixin(BakedQuad.class)
+public abstract class BakedQuadMixin implements IAcceleratedBakedQuad {
+
+	@Unique private static final	Map<int[], Map<IBufferGraph,	IMesh>>	MESHES = new Object2ObjectOpenCustomHashMap<>(IntArrayHashStrategy.INSTANCE);
+	@Unique private static final	Map<int[], Map<MeshData,		IMesh>>	MERGES = new Object2ObjectOpenCustomHashMap<>(IntArrayHashStrategy.INSTANCE);
+
+	@Shadow @Final protected		int[]									vertices;
+
+	@Shadow public abstract			boolean									isTinted();
+
+	@Shadow public abstract			Direction								getDirection();
+
+	@Unique
+	@Override
+	public void renderFast(
+			Matrix4f					transform,
+			Matrix3f					normal,
+			IAcceleratedVertexConsumer	extension,
+			int							combinedLight,
+			int							combinedOverlay,
+			int							color
+	) {
+		var meshes = MESHES.get(vertices);
+		var merges = MERGES.get(vertices);
+
+		if (meshes == null) {
+			meshes = new Object2ObjectOpenHashMap<>	();
+			merges = new Object2ObjectOpenHashMap<>	();
+			MESHES.put								(vertices, meshes);
+			MERGES.put								(vertices, merges);
+		}
+
+		var mesh = meshes.get(extension);
+
+		if (mesh != null) {
+			mesh.write(
+					extension,
+					getCustomColor(color),
+					combinedLight,
+					combinedOverlay
+			);
+			return;
+		}
+
+		var meshCollector	= CoreFeature	.createMeshCollector(extension);
+		var meshBuilder		= extension		.decorate			(meshCollector);
+
+		for (var i = 0; i < vertices.length / IQuadTransformer.STRIDE; i++) {
+			var vertexOffset	= i				* IQuadTransformer.STRIDE;
+			var posOffset		= vertexOffset	+ IQuadTransformer.POSITION;
+			var colorOffset		= vertexOffset	+ IQuadTransformer.COLOR;
+			var uv0Offset		= vertexOffset	+ IQuadTransformer.UV0;
+			var uv2Offset		= vertexOffset	+ IQuadTransformer.UV2;
+			var normalOffset	= vertexOffset	+ IQuadTransformer.NORMAL;
+			var packedNormal	= vertices[normalOffset];
+
+			var normalX = ((byte) (	packedNormal		& 0xFF)) / 127.0f;
+			var normalY = ((byte) ((	packedNormal >> 8)	& 0xFF)) / 127.0f;
+			var normalZ = ((byte) ((	packedNormal >> 16)	& 0xFF)) / 127.0f;
+
+			// 1.21.4 item model quads often carry a zero packed normal (vanilla falls back to
+			// quad.getDirection() in ItemRenderer). SimpleBakedModelMixin already does this
+			// fallback; mirror it here for the bake_mesh_for_quads (dynamic quad) path.
+			// otherwise a (0,0,0) normal bakes into the cached mesh and kills directional
+			// diffuse lighting (all six faces render equally bright).
+			if (normalX == 0 && normalY == 0 && normalZ == 0) {
+				normalX = getDirection	().getStepX	();
+				normalY = getDirection	().getStepY	();
+				normalZ = getDirection	().getStepZ	();
+			}
+
+			meshBuilder.addVertex(
+					Float			.intBitsToFloat	(vertices[posOffset + 0]),
+					Float			.intBitsToFloat	(vertices[posOffset + 1]),
+					Float			.intBitsToFloat	(vertices[posOffset + 2]),
+					FastColorUtils	.convert		(vertices[colorOffset]),
+					Float			.intBitsToFloat	(vertices[uv0Offset + 0]),
+					Float			.intBitsToFloat	(vertices[uv0Offset + 1]),
+					combinedOverlay,
+					vertices[uv2Offset],
+					normalX,
+					normalY,
+					normalZ
+			);
+		}
+
+		meshCollector.flush();
+
+		var data	= meshCollector	.getData	();
+		var buffer	= meshCollector	.getBuffer	();
+		mesh		= merges		.get		(data);
+
+		if (mesh != null) {
+			buffer.discard	();
+			buffer.close	();
+		} else {
+			mesh = AcceleratedEntityRenderingFeature
+					.getMeshType()
+					.getBuilder	()
+					.build		(meshCollector);
+		}
+
+		meshes	.put	(extension, mesh);
+		merges	.put	(data,		mesh);
+		mesh	.write	(
+				extension,
+				getCustomColor(color),
+				combinedLight,
+				combinedOverlay
+		);
+	}
+
+	@Unique
+	@Override
+	public int getCustomColor(int color) {
+		return isTinted() ? color : -1;
+	}
+}

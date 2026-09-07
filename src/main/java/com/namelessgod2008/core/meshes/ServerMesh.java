@@ -1,0 +1,184 @@
+package com.namelessgod2008.core.meshes;
+
+import com.namelessgod2008.core.CoreFeature;
+import com.namelessgod2008.core.backends.buffers.EmptyServerBuffer;
+import com.namelessgod2008.core.backends.buffers.IServerBuffer;
+import com.namelessgod2008.core.buffers.accelerated.builders.IAcceleratedVertexConsumer;
+import com.namelessgod2008.core.buffers.memory.VertexLayout;
+import com.namelessgod2008.core.meshes.collectors.IMeshCollector;
+import com.namelessgod2008.core.meshes.data.cache.MeshDataCaches;
+import it.unimi.dsi.fastutil.objects.Reference2ObjectMap;
+import it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.objects.ReferenceArrayList;
+import it.unimi.dsi.fastutil.objects.ReferenceLists;
+import org.lwjgl.system.MemoryUtil;
+
+import java.util.List;
+
+public record ServerMesh(
+		int				meshLayer,
+		int				meshId,
+		int				size,
+		int				offset,
+		boolean			forceDense,
+		IServerBuffer	meshBuffer
+) implements IMesh {
+
+	@Override
+	public void write(
+			IAcceleratedVertexConsumer	extension,
+			int							color,
+			int							light,
+			int							overlay
+	) {
+		extension.addServerMesh(
+				this,
+				color,
+				light,
+				overlay
+		);
+	}
+
+	public boolean isDense(int count) {
+		return forceDense || count >= CoreFeature.getSparseThreshold();
+	}
+
+	public static class Builder implements IMesh.Builder {
+
+		public static final Builder													INSTANCE;
+		public static final Reference2ObjectMap<VertexLayout, List<IServerBuffer>>	NORMAL_BUFFERS;
+		public static final Reference2ObjectMap<VertexLayout, List<IServerBuffer>>	RELOAD_BUFFERS;
+		public static		int														COUNTER;
+
+		static {
+			INSTANCE		= new Builder						();
+			NORMAL_BUFFERS	= new Reference2ObjectOpenHashMap<>	();
+			RELOAD_BUFFERS	= new Reference2ObjectOpenHashMap<>	();
+
+			NORMAL_BUFFERS.defaultReturnValue(ReferenceLists.singleton(EmptyServerBuffer.INSTANCE));
+			RELOAD_BUFFERS.defaultReturnValue(ReferenceLists.singleton(EmptyServerBuffer.INSTANCE));
+		}
+
+		private Builder() {
+
+		}
+
+		@Override
+		public IMesh build(
+				IMeshCollector	collector,
+				boolean			forceDense,
+				boolean			reloadSensitive,
+				int				meshLayer
+		) {
+			var vertexCount	= collector.getVertexCount();
+
+			if (vertexCount == 0) {
+				return EmptyMesh.INSTANCE;
+			}
+
+			var builder	= collector				.getBuffer	();
+			var layout	= collector				.getLayout	();
+			var data	= collector				.getData	();
+			var mesh	= MeshDataCaches.SERVER	.get		(layout, data);
+
+			if (mesh != null) {
+				builder.discard	();
+				builder.close	();
+
+				return mesh;
+			}
+
+			var result = builder.build();
+
+			if (result == null) {
+				builder.discard	();
+				builder.close	();
+
+				return EmptyMesh.INSTANCE;
+			}
+
+			var buffers = reloadSensitive
+					? RELOAD_BUFFERS
+					: NORMAL_BUFFERS;
+
+			var buffer		= result	.byteBuffer		();
+			var capacity	= buffer	.capacity		();
+			var meshBuffers	= buffers	.getOrDefault	(layout, null);
+			var address		= MemoryUtil.memAddress0	(buffer);
+
+			var meshBuffer = (MeshBuffer) null;
+
+			if (meshBuffers == null) {
+				meshBuffers	= new ReferenceArrayList<>	();
+				meshBuffer	= new MeshBuffer			(64L);
+				meshBuffers	.add						(meshBuffer);
+				buffers		.put						(layout, meshBuffers);
+			} else {
+				meshBuffer = (MeshBuffer) meshBuffers.getLast();
+			}
+
+			if (meshBuffer.overflow(capacity)) {
+				meshBuffer = new MeshBuffer(64L);
+
+				meshBuffers.add(meshBuffer);
+			}
+
+			var vertexOffset = meshBuffer.append(address, capacity) / layout.getSize();
+
+			builder.discard	();
+			builder.close	();
+
+			mesh = new ServerMesh(
+					meshLayer,
+					COUNTER ++,
+					(int) vertexCount,
+					(int) vertexOffset,
+					forceDense,
+					meshBuffer
+			);
+
+			MeshDataCaches.SERVER.set(
+					layout,
+					data,
+					mesh
+			);
+
+			return mesh;
+		}
+
+		@Override
+		public IMesh build(
+				IMeshCollector	collector,
+				boolean			forceDense,
+				int				meshLayer
+		) {
+			return build(
+					collector,
+					forceDense,
+					false,
+					meshLayer
+			);
+		}
+
+		@Override
+		public IMesh build(IMeshCollector collector, boolean forceDense) {
+			return build(collector, forceDense, 0);
+		}
+
+		@Override
+		public IMesh build(IMeshCollector collector) {
+			return build(collector, false);
+		}
+
+		@Override
+		public void delete() {
+			for (var buffers : NORMAL_BUFFERS.values()) for (var buffer : buffers) buffer.delete();
+			for (var buffers : RELOAD_BUFFERS.values()) for (var buffer : buffers) buffer.delete();
+		}
+
+		@Override
+		public void reload() {
+			for (var buffers : RELOAD_BUFFERS.values()) for (var buffer : buffers) ((MeshBuffer) buffer).reset();
+		}
+	}
+}
