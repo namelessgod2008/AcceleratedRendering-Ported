@@ -5,7 +5,7 @@ import com.namelessgod2008.features.text.extensions.StyleExtension;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import lombok.experimental.ExtensionMethod;
 import net.minecraft.network.chat.Style;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.Objects;
 
@@ -17,7 +17,7 @@ public class SimpleSequenceKey implements ISequenceKey {
 	public static final int HIDDEN_BIT = 1 << 21;
 
 	private final	IntArrayList		texts;
-	private final	ResourceLocation	font;
+	private final	Identifier	font;
 	private final	int					flag;
 	private final	float				advance;
 
@@ -26,7 +26,7 @@ public class SimpleSequenceKey implements ISequenceKey {
 
 	public SimpleSequenceKey(
 			IntArrayList		texts,
-			ResourceLocation	font,
+			Identifier	font,
 			int					flag,
 			float				advance
 	) {
@@ -45,7 +45,7 @@ public class SimpleSequenceKey implements ISequenceKey {
 	}
 
 	@Override
-	public ResourceLocation getFont() {
+	public Identifier getFont() {
 		return font;
 	}
 
@@ -142,7 +142,7 @@ public class SimpleSequenceKey implements ISequenceKey {
 	public static class Mutable implements ISequenceKey {
 
 		private final	IntArrayList		texts;
-		private			ResourceLocation	font;
+		private			Identifier	font;
 		private			int					flag;
 		private			int					hashCode;
 		private			float				advance;
@@ -197,7 +197,7 @@ public class SimpleSequenceKey implements ISequenceKey {
 		}
 
 		@Override
-		public ResourceLocation getFont() {
+		public Identifier getFont() {
 			return font;
 		}
 

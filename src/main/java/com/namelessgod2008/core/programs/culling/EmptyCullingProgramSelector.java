@@ -1,7 +1,7 @@
 package com.namelessgod2008.core.programs.culling;
 
 import com.namelessgod2008.core.buffers.accelerated.builders.AcceleratedBufferBuilder;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 
 public class EmptyCullingProgramSelector implements ICullingProgramSelector {
 

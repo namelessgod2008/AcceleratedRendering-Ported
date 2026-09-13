@@ -14,7 +14,7 @@ public class AvailabilityUtils {
 			return AVAILABILITY;
 		}
 
-		if (!RenderSystem.isOnRenderThreadOrInit()) {
+		if (!RenderSystem.isOnRenderThread()) {
 			return false;
 		}
 

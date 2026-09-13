@@ -26,6 +26,11 @@ public class DoNothingVertexConsumer implements VertexConsumer {
 	}
 
 	@Override
+	public VertexConsumer setColor(int color) {
+		return this;
+	}
+
+	@Override
 	public VertexConsumer setNormal(
 			float normalX,
 			float normalY,
@@ -46,6 +51,11 @@ public class DoNothingVertexConsumer implements VertexConsumer {
 
 	@Override
 	public VertexConsumer setUv2(int u, int v) {
+		return this;
+	}
+
+	@Override
+	public VertexConsumer setLineWidth(float width) {
 		return this;
 	}
 }

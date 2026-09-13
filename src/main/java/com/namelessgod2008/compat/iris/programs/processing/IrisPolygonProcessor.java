@@ -5,7 +5,7 @@ import com.namelessgod2008.core.programs.dispatchers.FixedPolygonProgramDispatch
 import com.namelessgod2008.core.programs.dispatchers.IPolygonProgramDispatcher;
 import com.namelessgod2008.core.programs.processing.IPolygonProcessor;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 public class IrisPolygonProcessor implements IPolygonProcessor {
 
@@ -15,8 +15,8 @@ public class IrisPolygonProcessor implements IPolygonProcessor {
 
 	public IrisPolygonProcessor(
 			IPolygonProcessor	parent,
-			ResourceLocation	quadProgramKey,
-			ResourceLocation	triangleProgramKey
+			Identifier	quadProgramKey,
+			Identifier	triangleProgramKey
 	) {
 		this.parent				= parent;
 		this.quadDispatcher		= new FixedPolygonProgramDispatcher	(VertexFormat.Mode.QUADS,		quadProgramKey);

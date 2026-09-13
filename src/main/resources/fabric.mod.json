@@ -26,20 +26,8 @@
     ]
   },
   "mixins": [
-    "acceleratedrendering.compat.iris.mixins.json",
-    "acceleratedrendering.compat.immediatelyfast.mixins.json",
-    "acceleratedrendering.compat.xaero.mixins.json",
-    "acceleratedrendering.compat.forgeconfigapiport.mixins.json",
-    "acceleratedrendering.compat.rei.mixins.json",
-    "acceleratedrendering.compat.tweakeroo.mixins.json",
     "acceleratedrendering.core.mixins.json",
-    "acceleratedrendering.feature.entities.mixins.json",
-    "acceleratedrendering.feature.items.mixins.json",
-    "acceleratedrendering.compat.vanilla.mixins.json",
-    "acceleratedrendering.feature.filter.mixins.json",
-    "acceleratedrendering.feature.modelparts.mixins.json",
-    "acceleratedrendering.feature.modernui.mixins.json",
-    "acceleratedrendering.feature.text.mixins.json"
+    "acceleratedrendering.feature.modelparts.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.19.5",

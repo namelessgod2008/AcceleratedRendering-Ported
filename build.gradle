@@ -125,6 +125,47 @@ java {
 	targetCompatibility = JavaVersion.VERSION_25
 }
 
+// 26.1 移植分阶段策略：先从编译中排除非实体加速源码（文件保留在磁盘，后续阶段逐步加回）。
+// 只保留实体加速核心：core、configs、features/culling、features/modelparts、features/entities（除 InventoryScreenMixin）、compat/vanilla。
+sourceSets {
+	main {
+		java {
+			exclude 'com/namelessgod2008/features/items/**'
+			exclude 'com/namelessgod2008/features/filter/mixins/**'
+			exclude 'com/namelessgod2008/features/filter/FilterFeature.java'
+			exclude 'com/namelessgod2008/features/filter/FilterIMC.java'
+			exclude 'com/namelessgod2008/features/filter/ItemStackFilterStack.java'
+			// FilterType 是纯枚举，FeatureConfig 依赖它，保留
+			exclude 'com/namelessgod2008/features/geckolib/**'
+			exclude 'com/namelessgod2008/features/ftb/**'
+			exclude 'com/namelessgod2008/features/modernui/**'
+			exclude 'com/namelessgod2008/features/text/**'
+			exclude 'com/namelessgod2008/features/tlm/**'
+			exclude 'com/namelessgod2008/features/create/**'
+			exclude 'com/namelessgod2008/features/emf/**'
+			exclude 'com/namelessgod2008/features/simplebedrockmodel/**'
+			exclude 'com/namelessgod2008/features/entities/mixins/InventoryScreenMixin.java'
+			// 未注册的孤儿 mixin（依赖 items/text）
+			exclude 'com/namelessgod2008/core/mixins/compatibility/ParticleEngineMixin.java'
+			exclude 'com/namelessgod2008/compat/iris/**'
+			exclude 'com/namelessgod2008/compat/immediatelyfast/**'
+			exclude 'com/namelessgod2008/compat/tweakeroo/**'
+			exclude 'com/namelessgod2008/compat/xaero/**'
+			exclude 'com/namelessgod2008/compat/rei/**'
+			exclude 'com/namelessgod2008/compat/tweakmore/**'
+			exclude 'com/namelessgod2008/compat/trinkets/**'
+			exclude 'com/namelessgod2008/compat/sophisticated/**'
+			exclude 'com/namelessgod2008/compat/forgeconfigapiport/**'
+			// 26.1 移除 BakedQuad/GuiGraphics 等，这些 Forge 物品/配置辅助类无法编译。
+			// 配置界面改用 forgeconfigapiport 26.1.5 自带的 ConfigurationScreen（见 ARModMenu）。
+			exclude 'net/neoforged/neoforge/client/gui/ConfigScreen.java'
+			exclude 'net/neoforged/neoforge/client/model/IQuadTransformer.java'
+			// 无引用的孤儿辅助类（26.1 TextureAtlasSprite/SpriteContents 构造器变化）
+			exclude 'net/neoforged/neoforge/client/textures/UnitTextureAtlasSprite.java'
+		}
+	}
+}
+
 jar {
 	def projectName = project.name
 	inputs.property "projectName", projectName

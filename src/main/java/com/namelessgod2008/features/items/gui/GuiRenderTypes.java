@@ -2,10 +2,10 @@ package com.namelessgod2008.features.items.gui;
 
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.renderer.RenderStateShard;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.resources.Identifier;
 
 import net.minecraft.util.TriState;
 
@@ -15,7 +15,7 @@ public class GuiRenderTypes extends RenderType {
 
 	public static final ShaderStateShard POSITION_TEX_COLOR_SHADER = POSITION_TEXTURE_COLOR_SHADER;
 
-	public static final Function<ResourceLocation, RenderType> BLIT = Util.memoize(atlasLocation -> create(
+	public static final Function<Identifier, RenderType> BLIT = Util.memoize(atlasLocation -> create(
 				"acceleratedrendering:blit",
 				DefaultVertexFormat	.POSITION_TEX_COLOR,
 				VertexFormat.Mode	.QUADS,
@@ -53,7 +53,7 @@ public class GuiRenderTypes extends RenderType {
 		);
 	}
 
-	public static RenderType blit(ResourceLocation atlasLocation) {
+	public static RenderType blit(Identifier atlasLocation) {
 		return BLIT.apply(atlasLocation);
 	}
 }

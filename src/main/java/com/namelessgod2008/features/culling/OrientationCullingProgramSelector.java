@@ -4,8 +4,8 @@ import com.namelessgod2008.core.programs.culling.ICullingProgramDispatcher;
 import com.namelessgod2008.core.programs.culling.ICullingProgramSelector;
 import com.namelessgod2008.core.utils.RenderTypeUtils;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.resources.Identifier;
 
 public class OrientationCullingProgramSelector implements ICullingProgramSelector {
 
@@ -15,8 +15,8 @@ public class OrientationCullingProgramSelector implements ICullingProgramSelecto
 
 	public OrientationCullingProgramSelector(
 			ICullingProgramSelector	parent,
-			ResourceLocation		quadProgramKey,
-			ResourceLocation		triangleProgramKey
+			Identifier		quadProgramKey,
+			Identifier		triangleProgramKey
 	) {
 		this.parent				= parent;
 		this.quadDispatcher		= new OrientationCullingProgramDispatcher(VertexFormat.Mode.QUADS,		quadProgramKey);
@@ -28,7 +28,7 @@ public class OrientationCullingProgramSelector implements ICullingProgramSelecto
 		if (			OrientationCullingFeature	.isEnabled				()
 				&&	(	OrientationCullingFeature	.shouldIgnoreCullState	() || RenderTypeUtils.isCulled(renderType))
 		) {
-			return switch (renderType.mode) {
+			return switch (renderType.mode()) {
 				case QUADS		-> quadDispatcher;
 				case TRIANGLES	-> triangleDispatcher;
 				default			-> parent.select(renderType);

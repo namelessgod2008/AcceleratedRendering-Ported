@@ -1,5 +1,6 @@
 package com.namelessgod2008.core.programs.dispatchers.meshes;
 
+import com.namelessgod2008.core.AccelStats;
 import com.namelessgod2008.core.CoreFeature;
 import com.namelessgod2008.core.backends.buffers.IServerBuffer;
 import com.namelessgod2008.core.backends.programs.ComputeProgram;
@@ -11,7 +12,7 @@ import com.namelessgod2008.core.programs.ComputeShaderProgramLoader;
 import com.namelessgod2008.core.programs.overrides.IUploadingOverride;
 import it.unimi.dsi.fastutil.objects.*;
 import lombok.Getter;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.Collection;
 import java.util.Map;
@@ -39,7 +40,10 @@ public class MeshUploadingProgramDispatcher {
 	}
 
 	public void dispatch(Collection<AcceleratedBufferBuilder> builders, Buffers ringBuffer) {
+		long t0 = System.nanoTime();
+
 		glMemoryBarrier(lastBarriers);
+		AccelStats.MU_BARRIER += System.nanoTime() - t0;
 
 		var transform = ringBuffer
 				.getEnvironment						()
@@ -70,6 +74,8 @@ public class MeshUploadingProgramDispatcher {
 			}
 		}
 
+		AccelStats.MU_COLLECT += System.nanoTime() - t0;
+
 		for (var buffer : buffers.values()) {
 			var sparse	= buffer.getSparseUploads	();
 			var dense	= buffer.getDenseUploads	();
@@ -98,8 +104,12 @@ public class MeshUploadingProgramDispatcher {
 			}
 		}
 
+		AccelStats.MU_CLASSIFY += System.nanoTime() - t0;
+
 		ringBuffer.prepare				();
 		ringBuffer.bindTransformBuffers	();
+
+		AccelStats.MU_PREPARE += System.nanoTime() - t0;
 
 		for (var builder : builders) {
 			var globalOffset	= 0;
@@ -123,6 +133,8 @@ public class MeshUploadingProgramDispatcher {
 				}
 
 				for	(var uploader : upload.getUploaders()) {
+					AccelStats.MU_UPLOADERS ++;
+
 					var mesh		= uploader	.getServerMesh	();
 					var meshInfos	= uploader	.getMeshInfos	();
 					var meshCount	= meshInfos	.getMeshCount	();
@@ -153,6 +165,8 @@ public class MeshUploadingProgramDispatcher {
 				if (localCount != 0) {
 					meshBuffer.bindBase(GL_SHADER_STORAGE_BUFFER, SPARSE_MESH_BUFFER_INDEX);
 
+					AccelStats.MU_DISPATCHES ++;
+
 					lastBarriers |=	transform.dispatch(
 							builder,
 							vertexBuffer,
@@ -167,6 +181,8 @@ public class MeshUploadingProgramDispatcher {
 				}
 			}
 		}
+
+		AccelStats.MU_SPARSE += System.nanoTime() - t0;
 
 		for (var buffer : buffers.values()) {
 			var meshBuffer		= buffer.getMeshBuffer	();
@@ -197,6 +213,8 @@ public class MeshUploadingProgramDispatcher {
 							continue;
 						}
 
+						long tCpu = System.nanoTime();
+
 						for (var uploader : overrideUploaders) {
 							var meshOffsets		= offsets		.reserve		(uploader);
 							var vertexOffset	= meshOffsets	.vertexOffset	();
@@ -210,6 +228,10 @@ public class MeshUploadingProgramDispatcher {
 							);
 						}
 
+						AccelStats.MD_CPU_NANOS += System.nanoTime() - tCpu;
+
+						long tSubmit = System.nanoTime();
+
 						transform.resetOverride	();
 						uploading.useProgram	();
 						uploading.setupProgram	();
@@ -217,21 +239,31 @@ public class MeshUploadingProgramDispatcher {
 						meshBuffer.bindBase(GL_SHADER_STORAGE_BUFFER, MESH_BUFFER_INDEX);
 						infoBuffer.bindBase(GL_SHADER_STORAGE_BUFFER, MESH_INFO_BUFFER_INDEX);
 
+						AccelStats.MU_DISPATCHES ++;
+						AccelStats.MD_INSTANCES		+= overrideCounts;
+						AccelStats.MD_MESH_VERTS	+= mesh.size();
+						AccelStats.MD_WORKGROUPS	+= (long) (overrideCounts * mesh.size() + 127) / 128;
+
 						lastBarriers |= uploading.dispatchUploading(
 								overrideCounts,
 								mesh.size	(),
 								mesh.offset	()
 						);
+
+						AccelStats.MD_SUBMIT_NANOS += System.nanoTime() - tSubmit;
 					}
 				}
 			}
 		}
+
+		AccelStats.MU_DENSE += System.nanoTime() - t0;
 
 		for (var buffer : buffers.values()) {
 			buffer.clear();
 		}
 
 		offsets.clear();
+		AccelStats.MU_CLEAR += System.nanoTime() - t0;
 	}
 
 	public void clear() {
@@ -248,7 +280,7 @@ public class MeshUploadingProgramDispatcher {
 		private final Uniform			meshSizeUniform;
 		private final Uniform			meshOffsetUniform;
 
-		public Default(ResourceLocation key, long meshInfoSize) {
+		public Default(Identifier key, long meshInfoSize) {
 			this.meshInfoSize			= meshInfoSize;
 			this.program				= ComputeShaderProgramLoader.getProgram(key);
 			this.meshCountUniform		= program					.getUniform("meshCount");

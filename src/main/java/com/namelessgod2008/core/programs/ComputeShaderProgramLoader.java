@@ -7,7 +7,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.CrashReport;
 import net.minecraft.ReportedException;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
@@ -17,19 +17,19 @@ import org.apache.commons.io.IOUtils;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
-public class ComputeShaderProgramLoader extends SimplePreparableReloadListener<Map<ResourceLocation, ComputeShaderProgramLoader.ShaderSource>> {
+public class ComputeShaderProgramLoader extends SimplePreparableReloadListener<Map<Identifier, ComputeShaderProgramLoader.ShaderSource>> {
 
 	public	static final	ComputeShaderProgramLoader				INSTANCE		= new ComputeShaderProgramLoader();
-	private	static final	Map<ResourceLocation, ComputeProgram>	COMPUTE_SHADERS	= new Object2ObjectOpenHashMap<>();
+	private	static final	Map<Identifier, ComputeProgram>	COMPUTE_SHADERS	= new Object2ObjectOpenHashMap<>();
 	private	static			boolean									LOADED			= false;
 
 	@Override
-	protected Map<ResourceLocation, ShaderSource> prepare(ResourceManager resourceManager, ProfilerFiller profiler) {
+	protected Map<Identifier, ShaderSource> prepare(ResourceManager resourceManager, ProfilerFiller profiler) {
 		try {
-			var shaderSources	= new Object2ObjectOpenHashMap<ResourceLocation, ShaderSource>		();
+			var shaderSources	= new Object2ObjectOpenHashMap<Identifier, ShaderSource>		();
 			var shaderLocations	= ModLoader.postEventWithReturn(new LoadComputeShaderEvent()).build	();
 
-			for (ResourceLocation key : shaderLocations.keySet()) {
+			for (Identifier key : shaderLocations.keySet()) {
 				var definition			= shaderLocations	.get			(key);
 				var resourceLocation	= definition		.location		();
 				var barrierFlags		= definition		.barrierFlags	();
@@ -57,11 +57,11 @@ public class ComputeShaderProgramLoader extends SimplePreparableReloadListener<M
 
 	@Override
 	protected void apply(
-			Map<ResourceLocation, ShaderSource>	shaderSources,
+			Map<Identifier, ShaderSource>	shaderSources,
 			ResourceManager						resourceManager,
 			ProfilerFiller						profiler
 	) {
-		RenderSystem.recordRenderCall(() -> {
+		RenderSystem.queueFencedTask(() -> {
 			if (!AvailabilityUtils.isAvailable()) {
 				return;
 			}
@@ -100,7 +100,7 @@ public class ComputeShaderProgramLoader extends SimplePreparableReloadListener<M
 		});
 	}
 
-	public static ComputeProgram getProgram(ResourceLocation resourceLocation) {
+	public static ComputeProgram getProgram(Identifier resourceLocation) {
 		var program = COMPUTE_SHADERS.get(resourceLocation);
 
 		if (program == null) {

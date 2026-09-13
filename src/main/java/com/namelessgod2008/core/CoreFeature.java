@@ -272,6 +272,20 @@ public class CoreFeature {
 		return BYPASS_GUI_BATCHING_CONTROLLER_STACK.isEmpty() ? FeatureStatus.DISABLED : BYPASS_GUI_BATCHING_CONTROLLER_STACK.peek();
 	}
 
+	// 26.1: RenderSystem.getProjectionMatrix() 已移除（投影矩阵移入 GPU/ cameraState），
+	// 由 LevelRendererMixin 在世界渲染时缓存，供计算着色器 uniform 上传使用。
+	private static			org.joml.Matrix4f		PROJECTION_MATRIX								= new org.joml.Matrix4f();
+
+	public static void setProjectionMatrix(org.joml.Matrix4f projectionMatrix) {
+		if (projectionMatrix != null) {
+			PROJECTION_MATRIX = new org.joml.Matrix4f(projectionMatrix);
+		}
+	}
+
+	public static org.joml.Matrix4f getProjectionMatrix() {
+		return new org.joml.Matrix4f(PROJECTION_MATRIX);
+	}
+
 	public static void setRenderingLevel() {
 		RENDERING_LEVEL = true;
 	}

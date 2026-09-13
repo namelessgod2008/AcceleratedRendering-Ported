@@ -1,7 +1,7 @@
 package com.namelessgod2008.core.programs;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
-public record ComputeShaderDefinition(ResourceLocation location, int barrierFlags) {
+public record ComputeShaderDefinition(Identifier location, int barrierFlags) {
 
 }

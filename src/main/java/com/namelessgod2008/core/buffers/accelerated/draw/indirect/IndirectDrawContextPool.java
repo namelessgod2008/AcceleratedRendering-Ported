@@ -8,9 +8,10 @@ import com.namelessgod2008.core.buffers.accelerated.draw.pools.IElementPool.IEle
 import com.namelessgod2008.core.buffers.accelerated.draw.indirect.IndirectElementBufferPool.ElementSegment;
 import com.namelessgod2008.core.buffers.memory.IMemoryInterface;
 import com.namelessgod2008.core.buffers.memory.SimpleMemoryInterface;
+import com.namelessgod2008.core.utils.RenderTypeUtils;
 import com.namelessgod2008.core.utils.SimpleResetPool;
 import com.mojang.blaze3d.vertex.VertexFormat.Mode;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 
 import static org.lwjgl.opengl.GL46.*;
 
@@ -104,7 +105,7 @@ public class IndirectDrawContextPool extends SimpleResetPool<IndirectDrawContext
 		@Override
 		public void drawElements(Mode mode) {
 			glDrawElementsIndirect(
-					mode.asGLMode,
+					RenderTypeUtils.toGLMode(mode),
 					GL_UNSIGNED_INT,
 					commandOffset
 			);
@@ -113,8 +114,8 @@ public class IndirectDrawContextPool extends SimpleResetPool<IndirectDrawContext
 		@Override
 		public int compareTo(IDrawContext that) {
 			return Boolean.compare(
-					this.getRenderType().sortOnUpload,
-					that.getRenderType().sortOnUpload
+					this.getRenderType().sortOnUpload(),
+					that.getRenderType().sortOnUpload()
 			);
 		}
 

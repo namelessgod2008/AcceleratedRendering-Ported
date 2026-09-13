@@ -1,7 +1,7 @@
 package com.namelessgod2008.core.backends.states.viewports;
 
 import com.namelessgod2008.core.backends.states.IBindingState;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.IntBuffer;
@@ -17,7 +17,7 @@ public class OpenGLViewportBindingState implements IBindingState {
 	}
 
 	@Override
-	public void record(GuiGraphics graphics) {
+	public void record(GuiGraphicsExtractor graphics) {
 		glGetIntegerv(GL_VIEWPORT, bindingViewport);
 	}
 

@@ -1,7 +1,7 @@
 package com.namelessgod2008.compat.immediatelyfast.mixins;
 
 import lombok.EqualsAndHashCode;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import net.raphimc.immediatelyfast.feature.batching.BatchingBuffers;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;

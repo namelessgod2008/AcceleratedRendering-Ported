@@ -26,9 +26,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.resources.model.BakedModel;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import org.joml.Matrix3f;
@@ -273,7 +273,7 @@ var extension = graphics.bufferSource.getBuffer(context.renderType()).getAcceler
 	public void submitBlit(
 			Matrix4f			transform,
 			Matrix3f			normal,
-			ResourceLocation	atlasLocation,
+			Identifier	atlasLocation,
 			int					minX,
 			int					maxX,
 			int					minY,
@@ -284,7 +284,7 @@ var extension = graphics.bufferSource.getBuffer(context.renderType()).getAcceler
 			float				maxU,
 			float				minV,
 			float				maxV,
-			java.util.function.Function<ResourceLocation, net.minecraft.client.renderer.RenderType> renderTypeGetter
+			java.util.function.Function<Identifier, net.minecraft.client.renderer.RenderType> renderTypeGetter
 	) {
 		var layer = getLayer(getGlobalDepth(
 				transform.m22(),

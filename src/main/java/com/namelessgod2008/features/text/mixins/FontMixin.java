@@ -22,7 +22,7 @@ import net.minecraft.client.gui.font.glyphs.BakedGlyph;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.Style;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.FormattedCharSink;
 import net.minecraft.util.StringDecomposer;
@@ -51,7 +51,7 @@ public class FontMixin implements IAcceleratedFont {
 	@Unique private final IFormattedTextKey.Mutable									scratchKey		= new IFormattedTextKey.Mutable		();
 
 	@Shadow
-	public FontSet getFontSet(ResourceLocation fontLocation) {
+	public FontSet getFontSet(Identifier fontLocation) {
 		throw new UnsupportedOperationException("Implemented via mixin");
 	}
 

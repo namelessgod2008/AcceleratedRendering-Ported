@@ -1,14 +1,14 @@
 package com.namelessgod2008.features.items.gui.contexts;
 
 import com.namelessgod2008.features.items.gui.GuiBatchingController;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 
 public record BlitDrawContext(
 		Matrix4f			transform,
 		Matrix3f			normal,
-		ResourceLocation	atlasLocation,
+		Identifier	atlasLocation,
 		int					minX,
 		int					maxX,
 		int					minY,
@@ -21,7 +21,7 @@ public record BlitDrawContext(
 		float				maxU,
 		float				minV,
 		float				maxV,
-		java.util.function.Function<ResourceLocation, net.minecraft.client.renderer.RenderType> renderTypeGetter
+		java.util.function.Function<Identifier, net.minecraft.client.renderer.RenderType> renderTypeGetter
 ) implements IGuiElementContext {
 
 	@Override

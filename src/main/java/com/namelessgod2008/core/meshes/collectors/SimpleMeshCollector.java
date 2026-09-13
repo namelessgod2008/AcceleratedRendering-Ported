@@ -101,6 +101,17 @@ public class SimpleMeshCollector implements IMeshCollector {
 	}
 
 	@Override
+	public VertexConsumer setColor(int pColor) {
+		// 26.1 新增单个 ARGB 打包颜色的 setColor(int) 重载
+		return setColor(
+				FastColorCompat.ARGB32.red		(pColor),
+				FastColorCompat.ARGB32.green	(pColor),
+				FastColorCompat.ARGB32.blue		(pColor),
+				FastColorCompat.ARGB32.alpha	(pColor)
+		);
+	}
+
+	@Override
 	public VertexConsumer setUv(float pU, float pV) {
 		if (vertexAddress == -1) {
 			throw new IllegalStateException("Vertex not building!");
@@ -116,6 +127,11 @@ public class SimpleMeshCollector implements IMeshCollector {
 
 	@Override
 	public VertexConsumer setUv1(int pU, int pV) {
+		return this;
+	}
+
+	@Override
+	public VertexConsumer setLineWidth(float pWidth) {
 		return this;
 	}
 

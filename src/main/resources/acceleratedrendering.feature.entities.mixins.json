@@ -5,8 +5,7 @@
   "package": "com.namelessgod2008.features.entities.mixins",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "EntityRenderDispatcherMixin",
-    "InventoryScreenMixin"
+    "EntityRenderDispatcherMixin"
   ],
   "injectors": {
     "defaultRequire": 1

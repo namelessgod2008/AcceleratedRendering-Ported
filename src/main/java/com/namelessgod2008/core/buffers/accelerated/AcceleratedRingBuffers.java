@@ -1,5 +1,6 @@
 package com.namelessgod2008.core.buffers.accelerated;
 
+import com.namelessgod2008.core.AccelStats;
 import com.namelessgod2008.core.CoreFeature;
 import com.namelessgod2008.core.backends.Sync;
 import com.namelessgod2008.core.backends.VertexArray;
@@ -191,6 +192,14 @@ public class AcceleratedRingBuffers extends LoopResetPool<AcceleratedRingBuffers
 			return vertexBuffer.get();
 		}
 
+		/**
+		 * 26.1: 变换后的顶点缓冲（compute shader 的输出，绑定 GL_ARRAY_BUFFER 用于绘制）。
+		 * RenderPass 绘制需要它作为 vertex buffer。
+		 */
+		public IServerBuffer getVertexBufferStorage() {
+			return vertexBuffer.getBuffer();
+		}
+
 		public StagingBuffer getVaryingBuffer() {
 			return varyingBuffer.get();
 		}
@@ -234,7 +243,11 @@ public class AcceleratedRingBuffers extends LoopResetPool<AcceleratedRingBuffers
 			}
 
 			if (!sync.isSyncSignaled()) {
-				sync.waitSync();
+				long t = System.nanoTime();
+
+				sync.waitSync			();
+				AccelStats.SYNC_WAITS ++;
+				AccelStats.SYNC_NANOS += System.nanoTime() - t;
 			}
 
 			sync.deleteSync	();

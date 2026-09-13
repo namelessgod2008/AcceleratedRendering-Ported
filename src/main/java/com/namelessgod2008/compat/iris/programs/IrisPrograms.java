@@ -8,27 +8,27 @@ import com.namelessgod2008.core.programs.culling.LoadCullingProgramSelectorEvent
 import com.namelessgod2008.core.programs.processing.LoadPolygonProcessorEvent;
 import com.namelessgod2008.core.utils.ResourceLocationUtils;
 import net.irisshaders.iris.vertices.IrisVertexFormats;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.bus.api.SubscribeEvent;
 
 public class IrisPrograms {
 
-	public static final ResourceLocation IRIS_BLOCK_VERTEX_TRANSFORM_KEY		= ResourceLocationUtils.create("compat_block_vertex_transform_iris");
-	public static final ResourceLocation IRIS_ENTITY_VERTEX_TRANSFORM_KEY		= ResourceLocationUtils.create("compat_entity_vertex_transform_iris");
-	public static final ResourceLocation IRIS_GLYPH_VERTEX_TRANSFORM_KEY		= ResourceLocationUtils.create("compat_glyph_vertex_transform_iris");
-	public static final ResourceLocation IRIS_BLOCK_QUAD_CULLING_KEY			= ResourceLocationUtils.create("compat_block_quad_cull_iris");
-	public static final ResourceLocation IRIS_BLOCK_TRIANGLE_CULLING_KEY		= ResourceLocationUtils.create("compat_block_triangle_cull_iris");
-	public static final ResourceLocation IRIS_ENTITY_QUAD_CULLING_KEY			= ResourceLocationUtils.create("compat_entity_quad_cull_iris");
-	public static final ResourceLocation IRIS_ENTITY_TRIANGLE_CULLING_KEY		= ResourceLocationUtils.create("compat_entity_triangle_cull_iris");
-	public static final ResourceLocation IRIS_BLOCK_QUAD_PROCESSING_KEY			= ResourceLocationUtils.create("compat_block_quad_processing_iris");
-	public static final ResourceLocation IRIS_BLOCK_TRIANGLE_PROCESSING_KEY		= ResourceLocationUtils.create("compat_block_triangle_processing_iris");
-	public static final ResourceLocation IRIS_ENTITY_QUAD_PROCESSING_KEY		= ResourceLocationUtils.create("compat_entity_quad_processing_iris");
-	public static final ResourceLocation IRIS_ENTITY_TRIANGLE_PROCESSING_KEY	= ResourceLocationUtils.create("compat_entity_triangle_processing_iris");
-	public static final ResourceLocation IRIS_GLYPH_QUAD_PROCESSING_KEY			= ResourceLocationUtils.create("compat_glyph_quad_processing_iris");
-	public static final ResourceLocation IRIS_GLYPH_TRIANGLE_PROCESSING_KEY		= ResourceLocationUtils.create("compat_glyph_triangle_processing_iris");
-	public static final ResourceLocation IRIS_BLOCK_MESH_UPLOADING_KEY			= ResourceLocationUtils.create("compat_block_mesh_uploading_iris");
-	public static final ResourceLocation IRIS_ENTITY_MESH_UPLOADING_KEY			= ResourceLocationUtils.create("compat_entity_mesh_uploading_iris");
-	public static final ResourceLocation IRIS_GLYPH_MESH_UPLOADING_KEY			= ResourceLocationUtils.create("compat_glyph_mesh_uploading_iris");
+	public static final Identifier IRIS_BLOCK_VERTEX_TRANSFORM_KEY		= ResourceLocationUtils.create("compat_block_vertex_transform_iris");
+	public static final Identifier IRIS_ENTITY_VERTEX_TRANSFORM_KEY		= ResourceLocationUtils.create("compat_entity_vertex_transform_iris");
+	public static final Identifier IRIS_GLYPH_VERTEX_TRANSFORM_KEY		= ResourceLocationUtils.create("compat_glyph_vertex_transform_iris");
+	public static final Identifier IRIS_BLOCK_QUAD_CULLING_KEY			= ResourceLocationUtils.create("compat_block_quad_cull_iris");
+	public static final Identifier IRIS_BLOCK_TRIANGLE_CULLING_KEY		= ResourceLocationUtils.create("compat_block_triangle_cull_iris");
+	public static final Identifier IRIS_ENTITY_QUAD_CULLING_KEY			= ResourceLocationUtils.create("compat_entity_quad_cull_iris");
+	public static final Identifier IRIS_ENTITY_TRIANGLE_CULLING_KEY		= ResourceLocationUtils.create("compat_entity_triangle_cull_iris");
+	public static final Identifier IRIS_BLOCK_QUAD_PROCESSING_KEY			= ResourceLocationUtils.create("compat_block_quad_processing_iris");
+	public static final Identifier IRIS_BLOCK_TRIANGLE_PROCESSING_KEY		= ResourceLocationUtils.create("compat_block_triangle_processing_iris");
+	public static final Identifier IRIS_ENTITY_QUAD_PROCESSING_KEY		= ResourceLocationUtils.create("compat_entity_quad_processing_iris");
+	public static final Identifier IRIS_ENTITY_TRIANGLE_PROCESSING_KEY	= ResourceLocationUtils.create("compat_entity_triangle_processing_iris");
+	public static final Identifier IRIS_GLYPH_QUAD_PROCESSING_KEY			= ResourceLocationUtils.create("compat_glyph_quad_processing_iris");
+	public static final Identifier IRIS_GLYPH_TRIANGLE_PROCESSING_KEY		= ResourceLocationUtils.create("compat_glyph_triangle_processing_iris");
+	public static final Identifier IRIS_BLOCK_MESH_UPLOADING_KEY			= ResourceLocationUtils.create("compat_block_mesh_uploading_iris");
+	public static final Identifier IRIS_ENTITY_MESH_UPLOADING_KEY			= ResourceLocationUtils.create("compat_entity_mesh_uploading_iris");
+	public static final Identifier IRIS_GLYPH_MESH_UPLOADING_KEY			= ResourceLocationUtils.create("compat_glyph_mesh_uploading_iris");
 
 	@SubscribeEvent
 	public static void onLoadComputeShaders(LoadComputeShaderEvent event) {

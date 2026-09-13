@@ -10,7 +10,7 @@ import com.namelessgod2008.features.items.colors.TintLayerColors;
 import com.mojang.blaze3d.vertex.PoseStack;
 import lombok.experimental.ExtensionMethod;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.entity.ItemRenderer;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.util.RandomSource;

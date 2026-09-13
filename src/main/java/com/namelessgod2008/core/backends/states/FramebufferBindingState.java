@@ -1,6 +1,6 @@
 package com.namelessgod2008.core.backends.states;
 
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import static org.lwjgl.opengl.GL46.*;
 
@@ -17,7 +17,7 @@ public class FramebufferBindingState implements IBindingState {
 	}
 
 	@Override
-	public void record(GuiGraphics graphics) {
+	public void record(GuiGraphicsExtractor graphics) {
 		bindingFramebuffer = glGetInteger(GL_FRAMEBUFFER_BINDING);
 
 		if (bindingFramebuffer == 0) {

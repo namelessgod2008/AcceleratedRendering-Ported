@@ -1,13 +1,13 @@
 package com.namelessgod2008.core.backends.states;
 
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 public class EmptyBindingState implements IBindingState {
 
 	public static final IBindingState INSTANCE = new EmptyBindingState();
 
 	@Override
-	public void record(GuiGraphics graphics) {
+	public void record(GuiGraphicsExtractor graphics) {
 
 	}
 

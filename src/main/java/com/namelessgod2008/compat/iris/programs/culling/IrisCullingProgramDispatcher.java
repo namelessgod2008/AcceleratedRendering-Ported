@@ -11,7 +11,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.irisshaders.iris.shadows.ShadowRenderer;
 import net.irisshaders.iris.shadows.ShadowRenderingState;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 public class IrisCullingProgramDispatcher implements ICullingProgramDispatcher {
 
@@ -26,7 +26,7 @@ public class IrisCullingProgramDispatcher implements ICullingProgramDispatcher {
 	private			final Uniform			vertexOffsetUniform;
 	private			final Uniform			varyingOffsetUniform;
 
-	public IrisCullingProgramDispatcher(VertexFormat.Mode mode, ResourceLocation key) {
+	public IrisCullingProgramDispatcher(VertexFormat.Mode mode, Identifier key) {
 		this.mode					= mode;
 		this.program				= ComputeShaderProgramLoader.getProgram(key);
 		this.viewMatrixUniform		= this.program				.getUniform("viewMatrix");

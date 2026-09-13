@@ -21,7 +21,7 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import com.namelessgod2008.core.utils.FastColorCompat;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
@@ -102,13 +102,16 @@ public class AcceleratedBufferBuilder implements IAcceleratedVertexConsumer, Ver
 		this.layerKey					= layerKey;
 		this.renderType					= layerKey		.renderType							();
 		this.layout						= environment	.getLayout							();
-		this.polygonProgramDispatcher	= environment	.selectProcessingProgramDispatcher	(this.renderType.mode);
+		this.polygonProgramDispatcher	= environment	.selectProcessingProgramDispatcher	(this.renderType.mode());
 		this.cullingProgramDispatcher	= environment	.selectCullingProgramDispatcher		(this.renderType);
 		this.programOverride			= environment	.getProgramOverride					(this.renderType);
 
-		this.mode						= this.renderType	.mode;
+		this.mode						= this.renderType	.mode();
 		this.polygonSize				= this.mode			.primitiveLength;
 		this.polygonElementCount		= this.mode			.indexCount		(this.polygonSize);
+
+		// 26.1: 索引模式取决于图元类型（QUADS 需三角化索引）。必须在任何 count() 之前注入。
+		this.elementSegment.setMode(this.mode);
 		this.vertexSize					= this.buffer		.getVertexSize	();
 
 		this.posOffset					= this.layout.getElement(VertexFormatElement.POSITION);
@@ -199,6 +202,21 @@ public class AcceleratedBufferBuilder implements IAcceleratedVertexConsumer, Ver
 	}
 
 	@Override
+	public VertexConsumer setColor(int pColor) {
+		// 26.1 新增单个 ARGB 打包颜色的 setColor(int) 重载
+		if (vertexAddress == -1) {
+			throw new IllegalStateException("Vertex not building!");
+		}
+
+		colorOffset.putByte(vertexAddress + 0L, (byte) (pColor >> 16 & 0xFF)); // R
+		colorOffset.putByte(vertexAddress + 1L, (byte) (pColor >> 8 & 0xFF));  // G
+		colorOffset.putByte(vertexAddress + 2L, (byte) (pColor & 0xFF));        // B
+		colorOffset.putByte(vertexAddress + 3L, (byte) (pColor >> 24 & 0xFF));  // A
+
+		return this;
+	}
+
+	@Override
 	public VertexConsumer setUv(float pU, float pV) {
 		if (vertexAddress == -1) {
 			throw new IllegalStateException("Vertex not building!");
@@ -271,6 +289,12 @@ public class AcceleratedBufferBuilder implements IAcceleratedVertexConsumer, Ver
 		normalOffset.putNormal(vertexAddress + 1L, pNormalY);
 		normalOffset.putNormal(vertexAddress + 2L, pNormalZ);
 
+		return this;
+	}
+
+	@Override
+	public VertexConsumer setLineWidth(float pWidth) {
+		// 26.1 新增 VertexConsumer.setLineWidth；加速管线不处理线宽元素，no-op
 		return this;
 	}
 

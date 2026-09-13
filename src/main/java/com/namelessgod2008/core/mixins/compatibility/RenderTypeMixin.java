@@ -4,23 +4,25 @@ import com.namelessgod2008.core.CoreFeature;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.mojang.datafixers.util.Pair;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Mixin(RenderType.class)
+// 26.1: energySwirl/breezeWind 从 RenderType 移到了 RenderTypes 工厂类
+@Mixin(RenderTypes.class)
 public class RenderTypeMixin {
 
-	@Unique private static final Map<Pair<ResourceLocation, Integer>, RenderType> ENERGY_SWIRL	= new ConcurrentHashMap<>();
-	@Unique private static final Map<Pair<ResourceLocation, Integer>, RenderType> BREEZE_WIND	= new ConcurrentHashMap<>();
+	@Unique private static final Map<Pair<Identifier, Integer>, RenderType> ENERGY_SWIRL	= new ConcurrentHashMap<>();
+	@Unique private static final Map<Pair<Identifier, Integer>, RenderType> BREEZE_WIND	= new ConcurrentHashMap<>();
 
 	@WrapMethod(method = "energySwirl")
 	private static RenderType cacheEnergySwirl(
-			ResourceLocation		location,
+			Identifier		location,
 			float					u,
 			float					v,
 			Operation<RenderType>	original
@@ -34,7 +36,7 @@ public class RenderTypeMixin {
 
 	@WrapMethod(method = "breezeWind")
 	private static RenderType cacheBreezeWind(
-			ResourceLocation		location,
+			Identifier		location,
 			float					u,
 			float					v,
 			Operation<RenderType>	original

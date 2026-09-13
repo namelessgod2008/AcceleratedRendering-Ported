@@ -6,7 +6,7 @@ import com.namelessgod2008.core.meshes.ServerMesh;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import lombok.experimental.ExtensionMethod;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 
@@ -165,6 +165,13 @@ public abstract class AcceleratedVertexConsumerWrapper implements IAcceleratedVe
 	}
 
 	@Override
+	public VertexConsumer setColor(int color) {
+		// 26.1 新增单个 ARGB 打包颜色的 setColor(int) 重载
+		getDelegate().setColor(color);
+		return this;
+	}
+
+	@Override
 	public VertexConsumer setUv(float u, float v) {
 		getDelegate().setUv(u, v);
 		return this;
@@ -209,6 +216,13 @@ public abstract class AcceleratedVertexConsumerWrapper implements IAcceleratedVe
 				normalY,
 				normalZ
 		);
+		return this;
+	}
+
+	@Override
+	public VertexConsumer setLineWidth(float lineWidth) {
+		// 26.1 新增 VertexConsumer.setLineWidth；委托给 delegate
+		getDelegate().setLineWidth(lineWidth);
 		return this;
 	}
 

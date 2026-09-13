@@ -1,6 +1,6 @@
 package com.namelessgod2008.core.programs.overrides;
 
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 
 import java.util.Map;
 

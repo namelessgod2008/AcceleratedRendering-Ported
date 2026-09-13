@@ -94,6 +94,17 @@ public class CulledMeshCollector implements IMeshCollector {
 	}
 
 	@Override
+	public VertexConsumer setColor(int pColor) {
+		// 26.1 新增单个 ARGB 打包颜色的 setColor(int) 重载
+		return setColor(
+				(pColor >> 16 & 0xFF),
+				(pColor >> 8 & 0xFF),
+				(pColor & 0xFF),
+				(pColor >> 24 & 0xFF)
+		);
+	}
+
+	@Override
 	public VertexConsumer setUv(float pU, float pV) {
 		if (vertexIndex < 0) {
 			throw new IllegalStateException("Vertex not building!");
@@ -107,6 +118,11 @@ public class CulledMeshCollector implements IMeshCollector {
 
 	@Override
 	public VertexConsumer setUv1(int pU, int pV) {
+		return this;
+	}
+
+	@Override
+	public VertexConsumer setLineWidth(float pWidth) {
 		return this;
 	}
 

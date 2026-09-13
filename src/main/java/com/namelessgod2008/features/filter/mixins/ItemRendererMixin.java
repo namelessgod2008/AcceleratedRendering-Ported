@@ -7,7 +7,7 @@ import com.namelessgod2008.features.items.AcceleratedItemRenderingFeature;
 import com.namelessgod2008.features.text.AcceleratedTextRenderingFeature;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.entity.ItemRenderer;
 import net.minecraft.client.renderer.item.ItemStackRenderState;
 import net.minecraft.client.resources.model.BakedModel;

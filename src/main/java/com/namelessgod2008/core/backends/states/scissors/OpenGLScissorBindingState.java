@@ -1,7 +1,7 @@
 package com.namelessgod2008.core.backends.states.scissors;
 
 import com.namelessgod2008.core.backends.states.IBindingState;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.IntBuffer;
@@ -22,7 +22,7 @@ public class OpenGLScissorBindingState implements IBindingState {
 	}
 
 	@Override
-	public void record(GuiGraphics graphics) {
+	public void record(GuiGraphicsExtractor graphics) {
 		glGetIntegerv				(GL_SCISSOR_BOX, bindingScissor);
 		enabled		= glIsEnabled	(GL_SCISSOR_TEST);
 		recorded	= true;

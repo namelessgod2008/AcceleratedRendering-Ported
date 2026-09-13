@@ -11,8 +11,8 @@ import com.llamalad7.mixinextras.sugar.ref.LocalFloatRef;
 import java.util.function.Function;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -173,10 +173,10 @@ public abstract class AbstractContainerScreenMixin {
 		method = "renderSlotHighlightBack",
 		at = @org.spongepowered.asm.mixin.injection.At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/client/gui/GuiGraphics;blitSprite(Ljava/util/function/Function;Lnet/minecraft/resources/ResourceLocation;IIII)V"
+			target = "Lnet/minecraft/client/gui/GuiGraphics;blitSprite(Ljava/util/function/Function;Lnet/minecraft/resources/Identifier;IIII)V"
 		)
 	)
-	public void batchHighlightBack(GuiGraphics guiGraphics, Function<ResourceLocation, RenderType> renderTypeGetter, ResourceLocation spriteLocation, int x, int y, int width, int height, Operation<Void> original) {
+	public void batchHighlightBack(GuiGraphics guiGraphics, Function<Identifier, RenderType> renderTypeGetter, Identifier spriteLocation, int x, int y, int width, int height, Operation<Void> original) {
 		if (!CoreFeature.isLoaded() || !CoreFeature.isGuiBatching() || CoreFeature.shouldByPassGuiBatching()) {
 			original.call(guiGraphics, renderTypeGetter, spriteLocation, x, y, width, height);
 			return;
@@ -195,10 +195,10 @@ public abstract class AbstractContainerScreenMixin {
 		method = "renderSlotHighlightFront",
 		at = @org.spongepowered.asm.mixin.injection.At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/client/gui/GuiGraphics;blitSprite(Ljava/util/function/Function;Lnet/minecraft/resources/ResourceLocation;IIII)V"
+			target = "Lnet/minecraft/client/gui/GuiGraphics;blitSprite(Ljava/util/function/Function;Lnet/minecraft/resources/Identifier;IIII)V"
 		)
 	)
-	public void batchHighlightFront(GuiGraphics guiGraphics, Function<ResourceLocation, RenderType> renderTypeGetter, ResourceLocation spriteLocation, int x, int y, int width, int height, Operation<Void> original) {
+	public void batchHighlightFront(GuiGraphics guiGraphics, Function<Identifier, RenderType> renderTypeGetter, Identifier spriteLocation, int x, int y, int width, int height, Operation<Void> original) {
 		if (!CoreFeature.isLoaded() || !CoreFeature.isGuiBatching() || CoreFeature.shouldByPassGuiBatching()) {
 			original.call(guiGraphics, renderTypeGetter, spriteLocation, x, y, width, height);
 			return;

@@ -1,7 +1,7 @@
 package com.namelessgod2008.features.items.gui.contexts;
 
 import com.namelessgod2008.features.items.gui.GuiBatchingController;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 

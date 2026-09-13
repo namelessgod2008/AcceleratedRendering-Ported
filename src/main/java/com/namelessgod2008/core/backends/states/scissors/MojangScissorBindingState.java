@@ -2,7 +2,7 @@ package com.namelessgod2008.core.backends.states.scissors;
 
 import com.namelessgod2008.core.backends.states.IBindingState;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import static org.lwjgl.opengl.GL46.*;
 
@@ -24,8 +24,8 @@ public class MojangScissorBindingState implements IBindingState {
 	}
 
 	@Override
-	public void record(GuiGraphics graphics) {
-		var rect = graphics.scissorStack.stack.peekLast();
+	public void record(GuiGraphicsExtractor graphics) {
+		var rect = graphics.scissorStack.peek();
 
 		if (rect != null) {
 			var window	= Minecraft.getInstance()	.getWindow	();

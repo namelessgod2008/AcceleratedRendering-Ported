@@ -17,8 +17,8 @@ import com.namelessgod2008.core.programs.processing.LoadPolygonProcessorEvent;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.irisshaders.iris.api.v0.IrisApi;
 import net.irisshaders.iris.vertices.ImmediateState;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.resources.Identifier;
 import net.neoforged.fml.ModLoader;
 
 import java.util.Set;
@@ -32,8 +32,8 @@ public class IrisBufferEnvironment implements IBufferEnvironment {
 			IBufferEnvironment	vanillaSubSet,
 			VertexFormat		vanillaVertexFormat,
 			VertexFormat		irisVertexFormat,
-			ResourceLocation	meshUploadingProgramKey,
-			ResourceLocation	transformProgramKey
+			Identifier	meshUploadingProgramKey,
+			Identifier	transformProgramKey
 	) {
 		this.vanillaSubSet	= vanillaSubSet;
 		this.irisSubSet		= new IrisSubSet(
@@ -138,8 +138,8 @@ public class IrisBufferEnvironment implements IBufferEnvironment {
 		public IrisSubSet(
 				VertexFormat		vanillaVertexFormat,
 				VertexFormat		irisVertexFormat,
-				ResourceLocation	uploadingProgramKey,
-				ResourceLocation	transformProgramKey
+				Identifier	uploadingProgramKey,
+				Identifier	transformProgramKey
 		) {
 			var defaultTransformOverride		= new TransformProgramDispatcher	.Default(transformProgramKey, 4L * 4L);
 			var defaultUploadingOverride		= new MeshUploadingProgramDispatcher.Default(uploadingProgramKey, 9L * 4L);

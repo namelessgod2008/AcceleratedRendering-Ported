@@ -8,7 +8,7 @@ import com.namelessgod2008.core.utils.RenderTypeUtils;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 
 import java.util.Map;
 import java.util.Set;
@@ -45,10 +45,10 @@ public class AcceleratedBufferSources implements IAcceleratedBufferSource {
 		if (			renderType		!= null
 				&& 	(	CoreFeature		.shouldForceAccelerateTranslucent	()	|| supportTranslucent	|| !RenderTypeUtils.isTranslucent	(renderType))
 				&& 	(	CoreFeature		.shouldCacheDynamicRenderType		()	|| supportDynamic		|| !RenderTypeUtils.isDynamic		(renderType))
-				&&		validModes		.contains							(renderType.mode)
+				&&		validModes		.contains							(renderType.mode())
 		) {
 			return sources
-					.getOrDefault	(renderType.format, defaultSource)
+					.getOrDefault	(renderType.format(), defaultSource)
 					.getBuffer		(
 							renderType,
 							before,

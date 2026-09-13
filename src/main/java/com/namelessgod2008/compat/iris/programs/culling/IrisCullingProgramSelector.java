@@ -7,8 +7,8 @@ import com.namelessgod2008.core.utils.RenderTypeUtils;
 import com.namelessgod2008.features.culling.OrientationCullingFeature;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.irisshaders.iris.shadows.ShadowRenderingState;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.resources.Identifier;
 
 public class IrisCullingProgramSelector implements ICullingProgramSelector {
 
@@ -18,8 +18,8 @@ public class IrisCullingProgramSelector implements ICullingProgramSelector {
 
 	public IrisCullingProgramSelector(
 			ICullingProgramSelector	parent,
-			ResourceLocation		quadProgramKey,
-			ResourceLocation		triangleProgramKey
+			Identifier		quadProgramKey,
+			Identifier		triangleProgramKey
 	) {
 		this.parent				= parent;
 		this.quadDispatcher		= new IrisCullingProgramDispatcher(VertexFormat.Mode.QUADS,		quadProgramKey);

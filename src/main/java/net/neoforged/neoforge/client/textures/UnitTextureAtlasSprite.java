@@ -9,7 +9,7 @@ import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.metadata.animation.FrameSize;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceMetadata;
 
 /**
@@ -18,7 +18,7 @@ import net.minecraft.server.packs.resources.ResourceMetadata;
  * Useful for baking quads that won't be used with an atlas.
  */
 public class UnitTextureAtlasSprite extends TextureAtlasSprite {
-    public static final ResourceLocation LOCATION = ResourceLocation.fromNamespaceAndPath("neoforge", "unit");
+    public static final Identifier LOCATION = Identifier.fromNamespaceAndPath("neoforge", "unit");
     public static final UnitTextureAtlasSprite INSTANCE = new UnitTextureAtlasSprite();
 
     private UnitTextureAtlasSprite() {

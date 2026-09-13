@@ -120,6 +120,11 @@ public class AcceleratedEntityOutlineGenerator extends AcceleratedVertexConsumer
 	}
 
 	@Override
+	public VertexConsumer setLineWidth(float pWidth) {
+		return delegate.setLineWidth(pWidth);
+	}
+
+	@Override
 	public VertexConsumer setNormal(
 			float pNormalX,
 			float pNormalY,

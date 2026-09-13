@@ -7,6 +7,7 @@ public class SimpleTextureTarget extends TextureTarget {
 
 	public SimpleTextureTarget(boolean useDepth) {
 		super(
+				"simple",
 				Minecraft.getInstance().getWindow().getWidth	(),
 				Minecraft.getInstance().getWindow().getHeight	(),
 				useDepth

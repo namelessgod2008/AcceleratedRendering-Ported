@@ -1,5 +1,6 @@
 package com.namelessgod2008.features.culling;
 
+import com.namelessgod2008.core.CoreFeature;
 import com.namelessgod2008.core.backends.programs.ComputeProgram;
 import com.namelessgod2008.core.backends.programs.Uniform;
 import com.namelessgod2008.core.buffers.accelerated.builders.AcceleratedBufferBuilder;
@@ -7,7 +8,7 @@ import com.namelessgod2008.core.programs.ComputeShaderProgramLoader;
 import com.namelessgod2008.core.programs.culling.ICullingProgramDispatcher;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 public class OrientationCullingProgramDispatcher implements ICullingProgramDispatcher {
 
@@ -22,7 +23,7 @@ public class OrientationCullingProgramDispatcher implements ICullingProgramDispa
 	private			final Uniform			vertexOffsetUniform;
 	private			final Uniform			varyingOffsetUniform;
 
-	public OrientationCullingProgramDispatcher(VertexFormat.Mode mode, ResourceLocation key) {
+	public OrientationCullingProgramDispatcher(VertexFormat.Mode mode, Identifier key) {
 		this.mode					= mode;
 		this.program				= ComputeShaderProgramLoader.getProgram(key);
 		this.viewMatrixUniform		= this.program				.getUniform("viewMatrix");
@@ -38,7 +39,7 @@ public class OrientationCullingProgramDispatcher implements ICullingProgramDispa
 		var polygonCount	= vertexCount / mode.primitiveLength;
 
 		viewMatrixUniform	.uploadMatrix4f		(RenderSystem	.getModelViewMatrix	());
-		projectMatrixUniform.uploadMatrix4f		(RenderSystem	.getProjectionMatrix());
+		projectMatrixUniform.uploadMatrix4f		(CoreFeature	.getProjectionMatrix());
 		polygonCountUniform	.uploadUnsignedInt	(polygonCount);
 		vertexOffsetUniform	.uploadUnsignedInt	((int) (builder.getVertexCountOffset	()));
 		varyingOffsetUniform.uploadUnsignedInt	((int) (builder.getVaryingCountOffset	()));

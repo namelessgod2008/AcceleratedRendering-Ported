@@ -9,11 +9,11 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.entity.ItemRenderer;
 import net.minecraft.client.renderer.item.ItemStackRenderState;
 import net.minecraft.client.resources.model.BakedModel;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import com.namelessgod2008.core.utils.FastColorCompat;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
@@ -205,8 +205,8 @@ public class GuiGraphicsMixin {
 	// shows no issues — likely GPU driver or VAO config specific).
 	@WrapMethod(method = "innerBlit")
 	public void renderBlitFast(
-			Function<ResourceLocation, RenderType>	renderTypeGetter,
-			ResourceLocation						atlasLocation,
+			Function<Identifier, RenderType>	renderTypeGetter,
+			Identifier						atlasLocation,
 			int										minX,
 			int										maxX,
 			int										minY,

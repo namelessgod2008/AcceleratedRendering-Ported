@@ -14,8 +14,8 @@ import com.namelessgod2008.core.programs.overrides.*;
 import com.namelessgod2008.core.programs.processing.IPolygonProcessor;
 import com.namelessgod2008.core.programs.processing.LoadPolygonProcessorEvent;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.resources.Identifier;
 import net.neoforged.fml.ModLoader;
 
 import java.util.Set;
@@ -34,8 +34,8 @@ public class VanillaBufferEnvironment implements IBufferEnvironment {
 
 	public VanillaBufferEnvironment(
 			VertexFormat		vertexFormat,
-			ResourceLocation	uploadingProgramKey,
-			ResourceLocation	transformProgramKey
+			Identifier	uploadingProgramKey,
+			Identifier	transformProgramKey
 	) {
 		var defaultTransformOverride		= new TransformProgramDispatcher	.Default(transformProgramKey, 4L * 4L);
 		var defaultUploadingOverride		= new MeshUploadingProgramDispatcher.Default(uploadingProgramKey, 7L * 4L);
@@ -59,7 +59,7 @@ public class VanillaBufferEnvironment implements IBufferEnvironment {
 
 	@Override
 	public void setupBufferState() {
-		vertexFormat.setupBufferState();
+		// 26.1: 顶点属性绑定由 RenderPass/pipeline 自动处理，不再需要手动 setup
 	}
 
 	@Override

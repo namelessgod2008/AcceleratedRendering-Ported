@@ -7,10 +7,10 @@ import com.namelessgod2008.features.entities.AcceleratedEntityShadowRenderer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import lombok.experimental.ExtensionMethod;
-import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.BlockPos;
+import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import org.joml.Matrix3f;
@@ -73,7 +73,7 @@ public class EntityRenderDispatcherMixin {
 					),
 					pPose.pose(),
 					SHADOW_NORMAL_MATRIX,
-					LightTexture	.FULL_BRIGHT,
+					LightCoordsUtil	.FULL_BRIGHT,
 					OverlayTexture	.NO_OVERLAY,
 					-1
 			);

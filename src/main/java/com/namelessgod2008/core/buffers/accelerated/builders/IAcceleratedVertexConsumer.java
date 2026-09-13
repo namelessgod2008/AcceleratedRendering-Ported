@@ -7,7 +7,7 @@ import com.namelessgod2008.core.meshes.ServerMesh;
 import com.namelessgod2008.core.utils.TextureUtils;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 

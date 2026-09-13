@@ -1,85 +1,26 @@
 package com.namelessgod2008.core.utils;
 
-import com.namelessgod2008.core.CoreFeature;
 import com.mojang.blaze3d.platform.NativeImage;
 import it.unimi.dsi.fastutil.objects.Object2ObjectLinkedOpenHashMap;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.resources.ResourceLocation;
-import org.lwjgl.system.MemoryStack;
-
-import static org.lwjgl.opengl.GL46.*;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.resources.Identifier;
 
 
 public class TextureUtils {
 
 	public 	static	final TextureUtils													INSTANCE	= new TextureUtils						();
-	private	static	final Object2ObjectLinkedOpenHashMap<ResourceLocation, NativeImage> IMAGE_CACHE	= new Object2ObjectLinkedOpenHashMap<>	();
+	private	static	final Object2ObjectLinkedOpenHashMap<Identifier, NativeImage> IMAGE_CACHE	= new Object2ObjectLinkedOpenHashMap<>	();
 
 	public static void reload() {
 		IMAGE_CACHE.clear();
 	}
 
+	/**
+	 * 26.1: AbstractTexture.bind() 与 NativeImage.downloadTexture() 已移除，纹理像素读取
+	 * 需改用 GpuDevice command encoder 实现（后续专项）。当前先解析纹理位置但不下载像素，
+	 * 返回 null —— CulledMeshCollector 对 null 纹理安全降级（不基于纹理剔除），不影响顶点收集。
+	 */
 	public static NativeImage downloadTexture(RenderType renderType, int mipmapLevel) {
-		var textureLocation = RenderTypeUtils.getTextureLocation(renderType);
-
-		if (textureLocation == null) {
-			return null;
-		}
-
-		var image = IMAGE_CACHE.getAndMoveToFirst(textureLocation);
-
-		if (image != null) {
-			return image;
-		}
-
-		Minecraft
-				.getInstance		()
-				.getTextureManager	()
-				.getTexture			(textureLocation)
-				.bind				();
-
-		try (var stack = MemoryStack.stackPush()) {
-			var widthBuffer		= stack.callocInt(1);
-			var heightBuffer	= stack.callocInt(1);
-
-			glGetTexLevelParameteriv(
-					GL_TEXTURE_2D,
-					mipmapLevel,
-					GL_TEXTURE_WIDTH,
-					widthBuffer
-			);
-
-			glGetTexLevelParameteriv(
-					GL_TEXTURE_2D,
-					mipmapLevel,
-					GL_TEXTURE_HEIGHT,
-					heightBuffer
-			);
-
-			var width	= widthBuffer	.get(0);
-			var height	= heightBuffer	.get(0);
-
-			if (width == 0 || height == 0) {
-				return null;
-			}
-
-			var nativeImage = new NativeImage(
-					width,
-					height,
-					false
-			);
-
-			nativeImage	.downloadTexture	(mipmapLevel,		false);
-			IMAGE_CACHE	.putAndMoveToFirst	(textureLocation,	nativeImage);
-
-			if (IMAGE_CACHE.size() > CoreFeature.getCachedImageSize()) {
-				IMAGE_CACHE
-						.removeLast	()
-						.close		();
-			}
-
-			return nativeImage;
-		}
+		return null;
 	}
 }

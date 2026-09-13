@@ -3,7 +3,7 @@ package com.namelessgod2008.core.backends.states.buffers;
 import com.namelessgod2008.core.backends.states.IBindingState;
 import com.namelessgod2008.core.backends.states.buffers.cache.BlockBufferBindingCacheType;
 import com.namelessgod2008.core.backends.states.buffers.cache.IBlockBufferBindingCache;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import static org.lwjgl.opengl.GL46.*;
 
@@ -34,7 +34,7 @@ public class SimpleBlockBufferBindingState implements IBindingState {
 	}
 
 	@Override
-	public void record(GuiGraphics graphics) {
+	public void record(GuiGraphicsExtractor graphics) {
 		for (var bindingPoint = 0; bindingPoint < bindingRange; bindingPoint++) {
 			bindingCache.setup(
 					bindingPoint,

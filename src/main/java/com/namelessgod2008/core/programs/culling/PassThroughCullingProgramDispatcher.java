@@ -6,7 +6,7 @@ import com.namelessgod2008.core.buffers.accelerated.builders.AcceleratedBufferBu
 import com.namelessgod2008.core.programs.ComputeShaderProgramLoader;
 import com.namelessgod2008.core.programs.ComputeShaderPrograms;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 public class PassThroughCullingProgramDispatcher implements ICullingProgramDispatcher {
 
@@ -20,7 +20,7 @@ public class PassThroughCullingProgramDispatcher implements ICullingProgramDispa
 	private final Uniform			polygonCountUniform;
 	private final Uniform			vertexOffsetUniform;
 
-	public PassThroughCullingProgramDispatcher(VertexFormat.Mode mode, ResourceLocation key) {
+	public PassThroughCullingProgramDispatcher(VertexFormat.Mode mode, Identifier key) {
 		this.mode					= mode;
 		this.program				= ComputeShaderProgramLoader.getProgram(key);
 		this.polygonCountUniform	= program					.getUniform("polygonCount");

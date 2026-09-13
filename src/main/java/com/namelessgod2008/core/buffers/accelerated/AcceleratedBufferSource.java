@@ -1,5 +1,6 @@
 package com.namelessgod2008.core.buffers.accelerated;
 
+import com.namelessgod2008.core.AccelStats;
 import com.namelessgod2008.core.CoreFeature;
 import com.namelessgod2008.core.buffers.accelerated.builders.AcceleratedBufferBuilder;
 import com.namelessgod2008.core.buffers.accelerated.layers.LayerDrawType;
@@ -10,15 +11,12 @@ import com.namelessgod2008.core.buffers.accelerated.layers.storage.empty.EmptyLa
 import com.namelessgod2008.core.buffers.environments.IBufferEnvironment;
 import com.namelessgod2008.core.programs.dispatchers.meshes.MeshUploadingProgramDispatcher;
 import com.namelessgod2008.core.utils.RenderTypeUtils;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferUploader;
 import it.unimi.dsi.fastutil.ints.IntAVLTreeSet;
 import it.unimi.dsi.fastutil.ints.IntSet;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectLinkedOpenHashSet;
 import lombok.Getter;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 
 import java.util.Map;
 import java.util.Set;
@@ -129,19 +127,33 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 			return;
 		}
 
+		AccelStats.PREPARE_CALLS ++;
+
 		for (var buffer : buffers) {
 			var elementBuffer	= buffer.getElementBuffer	();
 			var builders		= buffer.getBuilders		();
+
+			long tQuery = System.nanoTime();
 			var program			= glGetInteger				(GL_CURRENT_PROGRAM);
+			AccelStats.GL_QUERY_NANOS += System.nanoTime() - tQuery;
 
 			if (builders.isEmpty()) {
 				continue;
 			}
 
+			long tUpload = System.nanoTime();
 			environment.selectMeshUploadingProgramDispatcher().dispatch	(builders.values(), buffer);
+			long tTransform = System.nanoTime();
 			environment.selectTransformProgramDispatcher	().dispatch	(builders.values());
+			long tDone = System.nanoTime();
+
+			AccelStats.UPLOAD_NANOS		+= tTransform - tUpload;
+			AccelStats.TRANSFORM_NANOS	+= tDone - tTransform;
+			AccelStats.DISPATCH_NANOS	+= tDone - tUpload;
 
 			glMemoryBarrier(barriers);
+
+			long tBuilder = System.nanoTime();
 
 			for (var layerKey : builders.keySet()) {
 				var builder = builders.get(layerKey);
@@ -149,6 +161,8 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 				if (builder.isEmpty()) {
 					continue;
 				}
+
+				AccelStats.BUILDER_COUNT ++;
 
 				var drawContext		= buffer			.getDrawContext		();
 				var elementSegment	= builder			.getElementSegment	();
@@ -176,7 +190,11 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 				barriers |= builder.getCullingProgramDispatcher().dispatch(builder);
 			}
 
+			AccelStats.BUILDER_NANOS += System.nanoTime() - tBuilder;
+
+			long tUse = System.nanoTime();
 			glUseProgram(program);
+			AccelStats.USE_PROGRAM_NANOS += System.nanoTime() - tUse;
 		}
 	}
 
@@ -199,30 +217,62 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 					continue;
 				}
 
-				BufferUploader	.invalidate		();
+				// 26.1: BufferUploader 已移除（GPU 状态由 GpuDevice 管理），bindDrawBuffers 前无需显式 invalidate
 				buffer			.bindDrawBuffers();
 				contexts		.prepare		();
 				function		.runBefore		();
 
+				// 26.1: 按输出目标分组共享 RenderPass（每个 draw 新建 pass 会导致极低帧率）
+				var byTarget = new java.util.LinkedHashMap<com.mojang.blaze3d.pipeline.RenderTarget, java.util.List<com.namelessgod2008.core.buffers.accelerated.draw.pools.IDrawContextPool.IDrawContext>>();
+
 				for (var drawContext : contexts) {
-					var renderType = drawContext.getRenderType();
+					var target = drawContext.getRenderTarget();
 
-					renderType.setupRenderState();
+					if (target != null) {
+						byTarget
+								.computeIfAbsent	(target, t -> new java.util.ArrayList<>())
+								.add				(drawContext);
+					}
+				}
 
-					var mode	= renderType	.mode;
-					var shader	= RenderSystem	.getShader();
+				// 26.1: 准备阶段必须在【任何 RenderPass 打开之前】完成。
+				// 解析纹理可能触发懒加载上传（writeToTexture），写入 DynamicTransforms 会 mapBuffer；
+				// 二者都是命令编码，在打开的 pass 内执行会抛
+				// "Close the existing render pass before performing additional commands"。
+				for (var entry : byTarget.entrySet()) {
+					for (var drawContext : entry.getValue()) {
+						drawContext.prepareDraw();
+					}
+				}
 
-					shader.setDefaultUniforms(
-							mode,
-							RenderSystem			.getModelViewMatrix	(),
-							RenderSystem			.getProjectionMatrix(),
-							Minecraft.getInstance()	.getWindow			()
-					);
+				for (var entry : byTarget.entrySet()) {
+					var target	= entry.getKey();
+					var color	= com.mojang.blaze3d.systems.RenderSystem.outputColorTextureOverride != null
+							? com.mojang.blaze3d.systems.RenderSystem.outputColorTextureOverride
+							: target.getColorTextureView();
+					var depth	= target.useDepth
+							? (com.mojang.blaze3d.systems.RenderSystem.outputDepthTextureOverride != null
+								? com.mojang.blaze3d.systems.RenderSystem.outputDepthTextureOverride
+								: target.getDepthTextureView())
+							: null;
 
-					shader		.apply				();
-					drawContext	.drawElements		(mode);
-					shader		.clear				();
-					renderType	.clearRenderState	();
+					try (var pass = com.mojang.blaze3d.systems.RenderSystem
+							.getDevice			()
+							.createCommandEncoder()
+							.createRenderPass	(
+									() -> "acceleratedrendering",
+									color,
+									java.util.OptionalInt.empty(),
+									depth,
+									java.util.OptionalDouble.empty()
+							)
+					) {
+						com.mojang.blaze3d.systems.RenderSystem.bindDefaultUniforms(pass);
+
+						for (var drawContext : entry.getValue()) {
+							drawContext.drawElements(pass, drawContext.getRenderType().mode());
+						}
+					}
 				}
 
 				function.runAfter			();

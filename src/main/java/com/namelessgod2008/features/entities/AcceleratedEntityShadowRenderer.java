@@ -4,9 +4,9 @@ import com.namelessgod2008.core.buffers.accelerated.builders.VertexConsumerExten
 import com.namelessgod2008.core.buffers.accelerated.renderers.IAcceleratedRenderer;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import lombok.experimental.ExtensionMethod;
-import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.core.BlockPos;
 import com.namelessgod2008.core.utils.FastColorCompat;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -61,7 +61,9 @@ public class AcceleratedEntityShadowRenderer implements IAcceleratedRenderer<Acc
 			return;
 		}
 
-		var dimensionBrightness	= LightTexture.getBrightness(levelReader.dimensionType(), levelBrightness);
+		// 26.1: LightTexture 已移除，内联原 getBrightness(DimensionType, levelBrightness) 语义：
+		// b = levelBrightness/15, lerp(dimensionType.ambientLight(), (4-3b)/4, 1)
+		var dimensionBrightness	= Mth.lerp(levelReader.dimensionType().ambientLight(), (4.0f - 3.0f * (levelBrightness / 15.0f)) / 4.0f, 1.0f);
 		var shadowTransparency	= weight * 0.5f * dimensionBrightness * 255.0f;
 
 		if (shadowTransparency < 0.0f) {

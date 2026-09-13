@@ -1,12 +1,12 @@
 package com.namelessgod2008.features.text.key;
 
 import it.unimi.dsi.fastutil.ints.IntArrayList;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 public interface ISequenceKey {
 
 	IntArrayList		getTexts		();
-	ResourceLocation	getFont			();
+	Identifier	getFont			();
 	float				getAdvance		();
 	int					getColor		();
 	boolean				hasColor		();

@@ -6,7 +6,7 @@ import com.namelessgod2008.core.buffers.accelerated.builders.AcceleratedBufferBu
 import com.namelessgod2008.core.buffers.accelerated.pools.StagingBufferPool;
 import com.namelessgod2008.core.programs.ComputeShaderProgramLoader;
 import com.namelessgod2008.core.programs.overrides.ITransformOverride;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.Collection;
 
@@ -100,7 +100,7 @@ public class TransformProgramDispatcher {
 		private final Uniform			vertexOffsetUniform;
 		private final Uniform			varyingOffsetUniform;
 
-		public Default(ResourceLocation key, long varyingSize) {
+		public Default(Identifier key, long varyingSize) {
 			this.varyingSize			= varyingSize;
 			this.program				= ComputeShaderProgramLoader.getProgram(key);
 			this.vertexCountUniform		= program					.getUniform("vertexCount");

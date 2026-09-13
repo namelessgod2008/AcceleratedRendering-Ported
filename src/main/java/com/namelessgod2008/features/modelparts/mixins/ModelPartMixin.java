@@ -1,5 +1,6 @@
 package com.namelessgod2008.features.modelparts.mixins;
 
+import com.namelessgod2008.core.AccelStats;
 import com.namelessgod2008.core.CoreFeature;
 import com.namelessgod2008.core.buffers.accelerated.builders.IBufferGraph;
 import com.namelessgod2008.core.buffers.accelerated.builders.IAcceleratedVertexConsumer;
@@ -50,6 +51,8 @@ public class ModelPartMixin implements IAcceleratedRenderer<Void> {
             int pColor,
             CallbackInfo ci
     ) {
+        AccelStats.COMPILE_CALLS ++;
+
         var extension = pBuffer.getAccelerated();
 
         // Only accelerate during world rendering — skip hand/GUI rendering
@@ -71,6 +74,8 @@ public class ModelPartMixin implements IAcceleratedRenderer<Void> {
         if (!extension.isAccelerated()) {
             return;
         }
+
+        AccelStats.ACCELERATED ++;
 
         ci.cancel();
         extension.doRender(
@@ -102,6 +107,7 @@ public class ModelPartMixin implements IAcceleratedRenderer<Void> {
         var mesh = meshes.get(extension);
 
         if (mesh != null) {
+            AccelStats.MESH_HIT ++;
             mesh.write(extension, color, light, overlay);
             extension.endTransform();
             return;
@@ -112,16 +118,16 @@ public class ModelPartMixin implements IAcceleratedRenderer<Void> {
 
         for (ModelPart.Cube cube : cubes) {
             for (ModelPart.Polygon polygon : cube.polygons) {
-                Vector3f polygonNormal = polygon.normal;
+                Vector3f polygonNormal = new Vector3f(polygon.normal());
 
-                for (ModelPart.Vertex vertex : polygon.vertices) {
+                for (ModelPart.Vertex vertex : polygon.vertices()) {
                     meshBuilder.addVertex(
-                            vertex.pos.x / 16.0f,
-                            vertex.pos.y / 16.0f,
-                            vertex.pos.z / 16.0f,
+                            vertex.worldX(),
+                            vertex.worldY(),
+                            vertex.worldZ(),
                             -1,
-                            vertex.u,
-                            vertex.v,
+                            vertex.u(),
+                            vertex.v(),
                             overlay,
                             0,
                             polygonNormal.x,
@@ -139,9 +145,11 @@ public class ModelPartMixin implements IAcceleratedRenderer<Void> {
         mesh = merges.get(data);
 
         if (mesh != null) {
+            AccelStats.MERGE_HIT ++;
             buffer.discard();
             buffer.close();
         } else {
+            AccelStats.BUILD ++;
             mesh = AcceleratedEntityRenderingFeature
                     .getMeshType()
                     .getBuilder()

@@ -1,7 +1,7 @@
 package com.namelessgod2008.features.text.key;
 
 import it.unimi.dsi.fastutil.ints.IntArrayList;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 public record IndexKey(ISequenceKey key, int id) implements ISequenceKey {
 
@@ -11,7 +11,7 @@ public record IndexKey(ISequenceKey key, int id) implements ISequenceKey {
 	}
 
 	@Override
-	public ResourceLocation getFont() {
+	public Identifier getFont() {
 		return key.getFont();
 	}
 

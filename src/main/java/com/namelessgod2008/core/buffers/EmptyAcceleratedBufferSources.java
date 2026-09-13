@@ -2,7 +2,7 @@ package com.namelessgod2008.core.buffers;
 
 import com.namelessgod2008.core.buffers.accelerated.IAcceleratedBufferSource;
 import com.namelessgod2008.core.buffers.accelerated.builders.AcceleratedBufferBuilder;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 
 public class EmptyAcceleratedBufferSources implements IAcceleratedBufferSource {
 

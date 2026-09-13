@@ -1,10 +1,10 @@
 package com.namelessgod2008.core.backends.states;
 
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 public interface IBindingState {
 
-	void record	(GuiGraphics graphics);
+	void record	(GuiGraphicsExtractor graphics);
 	void restore();
 	void delete	();
 }
