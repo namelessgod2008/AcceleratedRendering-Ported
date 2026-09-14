@@ -31,6 +31,7 @@ public class MeshUploadingProgramDispatcher {
 	private			final	Map<IServerBuffer,	Buffer>	buffers;
 
 	private					int							lastBarriers;
+	private static			long						lastSlowLog		= 0L;
 
 	public MeshUploadingProgramDispatcher() {
 		this.offsets = new MeshOffsets							(CoreFeature.getPooledBatchingSize());
@@ -184,6 +185,15 @@ public class MeshUploadingProgramDispatcher {
 
 		AccelStats.MU_SPARSE += System.nanoTime() - t0;
 
+		long tDense			= System.nanoTime();
+		long dGroups		= 0L;
+		long dUploads		= 0L;
+		long dUploaders		= 0L;
+		long dDispatch		= 0L;
+		long dHeads			= 0L;
+		long dCpuNanos		= 0L;
+		long dSubmitNanos	= 0L;
+
 		for (var buffer : buffers.values()) {
 			var meshBuffer		= buffer.getMeshBuffer	();
 			var denseUploads	= buffer.getDenseUploads();
@@ -193,7 +203,11 @@ public class MeshUploadingProgramDispatcher {
 			var layerSize		= denseUploads.getLayerSize	();
 
 			for (var meshLayer = 0; meshLayer < layerSize; meshLayer ++) {
+				dHeads += denseHeads[meshLayer];
+
 				for (int denseId = 0, denseSize = denseHeads[meshLayer]; denseId < denseSize; denseId++) {
+					dGroups ++;
+
 					var group = (DenseUploads.Group) denseObjects[meshLayer][denseId];
 
 					var mesh = group.getMesh();
@@ -203,10 +217,14 @@ public class MeshUploadingProgramDispatcher {
 							continue;
 						}
 
+						dUploads ++;
+
 						var override			= upload	.getOverride		();
 						var overrideUploaders	= upload	.getMeshUploads		();
 						var overrideCounts		= upload	.getMeshCounter		();
 						var uploading			= override	.uploading			();
+						// 每个 upload 使用独立 buffer：其内 dispatchUploading 的 shader 从 meshInfos[0] 读取，
+						// 故 reserve 必须从偏移 0 开始（不可与其他 upload 共享同一 buffer）。
 						var infoBuffer			= ringBuffer.getMeshInfoBuffer	();
 
 						if (overrideCounts == 0) {
@@ -216,6 +234,8 @@ public class MeshUploadingProgramDispatcher {
 						long tCpu = System.nanoTime();
 
 						for (var uploader : overrideUploaders) {
+							dUploaders ++;
+
 							var meshOffsets		= offsets		.reserve		(uploader);
 							var vertexOffset	= meshOffsets	.vertexOffset	();
 							var varyingOffset	= meshOffsets	.varyingOffset	();
@@ -229,6 +249,7 @@ public class MeshUploadingProgramDispatcher {
 						}
 
 						AccelStats.MD_CPU_NANOS += System.nanoTime() - tCpu;
+						dCpuNanos += System.nanoTime() - tCpu;
 
 						long tSubmit = System.nanoTime();
 
@@ -240,6 +261,8 @@ public class MeshUploadingProgramDispatcher {
 						infoBuffer.bindBase(GL_SHADER_STORAGE_BUFFER, MESH_INFO_BUFFER_INDEX);
 
 						AccelStats.MU_DISPATCHES ++;
+						dDispatch ++;
+
 						AccelStats.MD_INSTANCES		+= overrideCounts;
 						AccelStats.MD_MESH_VERTS	+= mesh.size();
 						AccelStats.MD_WORKGROUPS	+= (long) (overrideCounts * mesh.size() + 127) / 128;
@@ -251,12 +274,31 @@ public class MeshUploadingProgramDispatcher {
 						);
 
 						AccelStats.MD_SUBMIT_NANOS += System.nanoTime() - tSubmit;
+						dSubmitNanos += System.nanoTime() - tSubmit;
 					}
 				}
 			}
 		}
 
 		AccelStats.MU_DENSE += System.nanoTime() - t0;
+
+		long dTotal = System.nanoTime() - tDense;
+
+		if (dTotal > 2_000_000L && System.nanoTime() - lastSlowLog > 500_000_000L) {
+			lastSlowLog = System.nanoTime();
+
+			System.out.println(
+					"[AR-SLOW] dense=" + (dTotal / 1000L) + "us"
+					+ " groups=" + dGroups
+					+ " uploads=" + dUploads
+					+ " uploaders=" + dUploaders
+					+ " dispatch=" + dDispatch
+					+ " denseHeadSum=" + dHeads
+					+ " cpu=" + (dCpuNanos / 1000L) + "us"
+					+ " submit=" + (dSubmitNanos / 1000L) + "us"
+					+ " buffers=" + buffers.size()
+			);
+		}
 
 		for (var buffer : buffers.values()) {
 			buffer.clear();

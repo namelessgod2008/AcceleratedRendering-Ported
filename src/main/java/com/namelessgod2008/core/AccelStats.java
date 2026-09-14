@@ -80,6 +80,8 @@ public final class AccelStats {
 	public static long MD_MESH_VERTS	= 0L;
 	/** dense compute 的工作组总数 */
 	public static long MD_WORKGROUPS	= 0L;
+	/** ring buffer 池当前大小（扩容会重建大量 GL 资源） */
+	public static long RING_POOL_SIZE	= 0L;
 
 	private AccelStats() {
 	}
@@ -130,6 +132,7 @@ public final class AccelStats {
 				+ " mdInst=" + MD_INSTANCES
 				+ " mdMeshVerts=" + MD_MESH_VERTS
 				+ " mdWg=" + MD_WORKGROUPS
+				+ " pool=" + RING_POOL_SIZE
 		);
 
 		FRAMES			= 0L;

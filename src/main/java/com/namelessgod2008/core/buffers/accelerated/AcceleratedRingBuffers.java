@@ -37,6 +37,15 @@ public class AcceleratedRingBuffers extends LoopResetPool<AcceleratedRingBuffers
 
 	public AcceleratedRingBuffers(IBufferEnvironment bufferEnvironment) {
 		super(CoreFeature.getPooledRingBufferSize(), bufferEnvironment);
+
+		AccelStats.RING_POOL_SIZE = size;
+	}
+
+	@Override
+	protected void expand() {
+		super.expand();
+
+		AccelStats.RING_POOL_SIZE = size;
 	}
 
 	@Override
