@@ -59,6 +59,10 @@ public abstract class SimpleResetPool<T, C> {
 	}
 
 	protected void expand() {
+		// [临时探针] 池扩容：每次翻倍并 create() 新对象（MappedBufferPool 的 create 会建 GL buffer）
+		com.namelessgod2008.core.AccelStats.POOL_EXPANDS ++;
+		com.namelessgod2008.core.AccelStats.POOL_CREATES += size;
+
 		var old	= size;
 
 		size	= old * 2;

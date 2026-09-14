@@ -17,6 +17,7 @@
     "buffers.VertexConsumerMixin",
     "buffers.VertexDoubleConsumerMixin",
     "buffers.VertexMultipleConsumerMixin",
+    "compatibility.GlCommandEncoderMixin",
     "compatibility.MinecraftMixin",
     "compatibility.RenderTypeMixin",
     "GameRendererMixin",

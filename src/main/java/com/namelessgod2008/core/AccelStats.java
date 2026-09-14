@@ -35,6 +35,9 @@ public final class AccelStats {
 	public static long DRAW_NANOS		= 0L;
 
 	// ---- GPU 同步 ----
+	// ---- ring buffer 池耗尽等待（临时探针）----
+	public static long SYNC_CALLS	= 0L;	// waitSync() 被调用次数（= 池耗尽次数）
+
 	/** ring buffer 等待 GPU 的次数 */
 	public static long SYNC_WAITS		= 0L;
 	/** ring buffer 等待 GPU 的耗时（纳秒） */
@@ -83,6 +86,65 @@ public final class AccelStats {
 	/** ring buffer 池当前大小（扩容会重建大量 GL 资源） */
 	public static long RING_POOL_SIZE	= 0L;
 
+	// ---- mdCpu 细粒度分段（临时探针，定位纯 CPU 循环为何变慢）----
+	public static long MD_RESERVE_NANOS	= 0L;	// offsets.reserve + infoBuffer.reserve
+	public static long MD_UPLOAD_NANOS	= 0L;	// uploader.upload（纯内存写）
+
+	// ---- 缓冲归零（临时探针，判定「预热不收敛」）----
+	public static long RESET_CALLS		= 0L;	// MappedBuffer.reset() 次数
+	public static long RESET_MAX_POS	= 0L;	// reset 时观察到的最大 position（应远小于容量）
+
+	// ---- builder 复用（临时探针）----
+	public static long REUSE_HITS		= 0L;	// getBuffer 命中已存在 builder 的次数
+
+	// ---- 池扩容（临时探针）----
+	public static long POOL_EXPANDS		= 0L;	// SimpleResetPool.expand() 次数
+	public static long POOL_CREATES		= 0L;	// 因扩容创建的池对象数
+
+	// ---- 实际绘制规模（临时探针，仅统计 CoreBuffers.ENTITY）----
+	public static long DRAW_LAYERS		= 0L;	// 遍历到的加速层数
+	public static long DRAW_CONTEXTS	= 0L;	// 实际 drawElements 次数
+	public static long DRAW_WALK_NANOS	= 0L;	// drawBuffers 整段耗时
+
+	// ---- 自动故障捕获（临时探针）----
+	public static long FIRST_FRAME		= 0L;	// 本次世界渲染的首帧时刻
+	public static long LAST_EXPAND_LOG	= 0L;	// 上次 AR-ANOMALY 打印时刻（限流）
+
+	/** 区分「真在算」vs「被阻塞」：墙钟耗时与线程 CPU 耗时的对照。 */
+	private static final java.lang.management.ThreadMXBean THREAD_MX =
+			java.lang.management.ManagementFactory.getThreadMXBean();
+
+	/** 当前线程累计 CPU 时间（纳秒）；不支持时返回 0。 */
+	public static long cpuTime() {
+		try {
+			return THREAD_MX.isCurrentThreadCpuTimeSupported() ? THREAD_MX.getCurrentThreadCpuTime() : 0L;
+		} catch (UnsupportedOperationException e) {
+			return 0L;
+		}
+	}
+
+	/** dense 段的墙钟耗时（纳秒） */
+	public static long MD_DENSE_WALL_NANOS	= 0L;
+	/** dense 段的线程 CPU 耗时（纳秒）；远小于墙钟 = 线程被阻塞 */
+	public static long MD_DENSE_CPU_NANOS	= 0L;
+
+	// ---- 阶段计时（临时探针）----
+	public static long LEVEL_NANOS		= 0L;	// LevelRenderer.renderLevel 整段耗时
+	public static long LEVEL_START		= 0L;	// 起点（配对用）
+	public static long COMPILE_NANOS	= 0L;	// ModelPart.compile 拦截自身耗时
+
+	// ---- GL 缓冲重建（临时探针）----
+	public static long EXPAND_CALLS		= 0L;	// doExpand 调用次数
+	public static long EXPAND_BYTES		= 0L;	// 被拷贝的字节数（旧缓冲大小）
+	public static long EXPAND_NANOS		= 0L;	// doExpand 总耗时
+
+	// ---- 阴影加速（临时探针）----
+	public static long SHADOW_NANOS		= 0L;	// fastShadow 总耗时
+	public static long SHADOW_MISS_NANOS= 0L;	// 未走加速时提前返回的耗时
+	public static long SHADOW_CALLS		= 0L;	// 走加速的调用次数
+	public static long SHADOW_SUBMITS	= 0L;	// ShadowSubmit 总数
+	public static long SHADOW_PIECES	= 0L;	// ShadowPiece 总数
+
 	private AccelStats() {
 	}
 
@@ -110,6 +172,7 @@ public final class AccelStats {
 				+ " draw=" + (DRAW_NANOS / 1_000_000L) + "ms/s"
 				+ " syncWaits=" + SYNC_WAITS
 				+ " syncWait=" + (SYNC_NANOS / 1_000_000L) + "ms/s"
+				+ " syncCalls=" + SYNC_CALLS
 				+ " | glQuery=" + (GL_QUERY_NANOS / 1_000_000L) + "ms/s"
 				+ " dispatch=" + (DISPATCH_NANOS / 1_000_000L) + "ms/s"
 				+ " builder=" + (BUILDER_NANOS / 1_000_000L) + "ms/s"
@@ -133,6 +196,28 @@ public final class AccelStats {
 				+ " mdMeshVerts=" + MD_MESH_VERTS
 				+ " mdWg=" + MD_WORKGROUPS
 				+ " pool=" + RING_POOL_SIZE
+				+ " ||| shadow=" + (SHADOW_NANOS / 1_000_000L) + "ms/s"
+				+ " shadowMiss=" + (SHADOW_MISS_NANOS / 1_000_000L) + "ms/s"
+				+ " sCalls=" + SHADOW_CALLS
+				+ " sSubmits=" + SHADOW_SUBMITS
+				+ " sPieces=" + SHADOW_PIECES
+				+ " |||| expand=" + EXPAND_CALLS
+				+ " expandMB=" + (EXPAND_BYTES / 1024L / 1024L)
+				+ " expandMs=" + (EXPAND_NANOS / 1_000_000L) + "ms/s"
+				+ " ||||| level=" + (LEVEL_NANOS / 1_000_000L) + "ms/s"
+				+ " compileTime=" + (COMPILE_NANOS / 1_000_000L) + "ms/s"
+				+ " |||||| entLayers=" + DRAW_LAYERS
+				+ " entContexts=" + DRAW_CONTEXTS
+				+ " entWalk=" + (DRAW_WALK_NANOS / 1_000_000L) + "ms/s"
+				+ " ||||||| poolExpands=" + POOL_EXPANDS
+				+ " poolCreates=" + POOL_CREATES
+				+ " |||||||| reuse=" + REUSE_HITS
+				+ " resets=" + RESET_CALLS
+				+ " resetMaxPos=" + (RESET_MAX_POS / 1024L) + "KB"
+				+ " ||||||||| mdRes=" + (MD_RESERVE_NANOS / 1_000_000L)
+				+ " mdUp=" + (MD_UPLOAD_NANOS / 1_000_000L) + "ms/s"
+				+ " |||||||||| denseWall=" + (MD_DENSE_WALL_NANOS / 1_000_000L)
+				+ " denseCpu=" + (MD_DENSE_CPU_NANOS / 1_000_000L) + "ms/s"
 		);
 
 		FRAMES			= 0L;
@@ -147,6 +232,7 @@ public final class AccelStats {
 		PREPARE_NANOS	= 0L;
 		DRAW_NANOS		= 0L;
 		SYNC_WAITS		= 0L;
+		SYNC_CALLS		= 0L;
 		SYNC_NANOS		= 0L;
 		GL_QUERY_NANOS	= 0L;
 		DISPATCH_NANOS	= 0L;
@@ -170,6 +256,27 @@ public final class AccelStats {
 		MD_INSTANCES	= 0L;
 		MD_MESH_VERTS	= 0L;
 		MD_WORKGROUPS	= 0L;
+		MD_RESERVE_NANOS= 0L;
+		MD_UPLOAD_NANOS	= 0L;
+		MD_DENSE_WALL_NANOS = 0L;
+		MD_DENSE_CPU_NANOS	= 0L;
+		SHADOW_NANOS	= 0L;
+		SHADOW_MISS_NANOS = 0L;
+		SHADOW_CALLS	= 0L;
+		SHADOW_SUBMITS	= 0L;
+		SHADOW_PIECES	= 0L;
+		EXPAND_CALLS	= 0L;
+		EXPAND_BYTES	= 0L;
+		EXPAND_NANOS	= 0L;
+		LEVEL_NANOS		= 0L;
+		COMPILE_NANOS	= 0L;
+		DRAW_LAYERS		= 0L;
+		DRAW_CONTEXTS	= 0L;
+		DRAW_WALK_NANOS	= 0L;
+		POOL_EXPANDS	= 0L;
+		POOL_CREATES	= 0L;
+		REUSE_HITS		= 0L;
+		RESET_CALLS		= 0L;
 		lastReport		= now;
 	}
 }

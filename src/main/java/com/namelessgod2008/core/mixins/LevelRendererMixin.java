@@ -55,6 +55,11 @@ public class LevelRendererMixin {
 			CoreFeature.resetGuiBatching();
 		}
 		CoreFeature.setRenderingLevel();
+		// [临时探针] 记录 renderLevel 起点，用于统计整帧世界渲染耗时
+		AccelStats.LEVEL_START = System.nanoTime();
+		if (AccelStats.FIRST_FRAME == 0L) {
+			AccelStats.FIRST_FRAME = AccelStats.LEVEL_START;
+		}
 	}
 
 	@Inject(method = "renderLevel", at = @At("RETURN"))
@@ -71,6 +76,8 @@ public class LevelRendererMixin {
 		CallbackInfo ci
 	) {
 		CoreFeature.resetRenderingLevel();
+		// [临时探针] 累加整帧世界渲染耗时（含实体提交/地形/GUI 之外的全部世界渲染）
+		AccelStats.LEVEL_NANOS += System.nanoTime() - AccelStats.LEVEL_START;
 	}
 
 	/**

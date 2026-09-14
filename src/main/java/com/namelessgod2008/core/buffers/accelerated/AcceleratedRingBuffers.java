@@ -247,10 +247,14 @@ public class AcceleratedRingBuffers extends LoopResetPool<AcceleratedRingBuffers
 		}
 
 		protected void waitSync() {
+			// [临时探针] 记录 waitSync 被调用（池耗尽路径），这是「CPU 时间≈0 但墙钟高」的可能解释
+			AccelStats.SYNC_CALLS ++;
+
 			if (!sync.isSyncSet()) {
 				return;
 			}
 
+			// [临时探针] 真正走到「未 signaled 需等待」的次数与耗时
 			if (!sync.isSyncSignaled()) {
 				long t = System.nanoTime();
 

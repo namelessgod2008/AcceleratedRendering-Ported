@@ -1,5 +1,6 @@
 package com.namelessgod2008.features.entities.mixins;
 
+import com.namelessgod2008.core.AccelStats;
 import com.namelessgod2008.core.CoreFeature;
 import com.namelessgod2008.core.buffers.accelerated.builders.VertexConsumerExtension;
 import com.namelessgod2008.features.entities.AcceleratedEntityRenderingFeature;
@@ -69,6 +70,14 @@ public class ShadowFeatureRendererMixin {
 			MultiBufferSource.BufferSource	bufferSource,
 			CallbackInfo					ci
 	) {
+		// [临时探针] 统计 shadow 规模与耗时
+		long probeStart = System.nanoTime();
+		int  probeSubmits = nodeCollection.getShadowSubmits().size();
+		int  probePieces  = 0;
+		for (var s : nodeCollection.getShadowSubmits()) {
+			probePieces += s.pieces().size();
+		}
+
 		if (		!CoreFeature						.isLoaded						()
 				||	!CoreFeature						.isRenderingLevel				()
 				||	!AcceleratedEntityRenderingFeature	.isEnabled						()
@@ -82,10 +91,15 @@ public class ShadowFeatureRendererMixin {
 		var extension	= buffer				.getAccelerated		();
 
 		if (!extension.isAccelerated()) {
+			AccelStats.SHADOW_MISS_NANOS += System.nanoTime() - probeStart;
 			return;
 		}
 
 		ci.cancel();
+
+		AccelStats.SHADOW_CALLS		++;
+		AccelStats.SHADOW_SUBMITS	+= probeSubmits;
+		AccelStats.SHADOW_PIECES	+= probePieces;
 
 		// doRender → beginTransform 会把矩阵写入共享缓冲（拷贝），故可安全复用同一实例
 		var pose = new Matrix4f();
@@ -112,5 +126,7 @@ public class ShadowFeatureRendererMixin {
 				);
 			}
 		}
+
+		AccelStats.SHADOW_NANOS += System.nanoTime() - probeStart;
 	}
 }

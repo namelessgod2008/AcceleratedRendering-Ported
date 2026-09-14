@@ -66,6 +66,12 @@ public class MappedBuffer extends MutableBuffer implements IClientBuffer {
 	}
 
 	public void reset() {
+		// [临时探针] 统计归零次数：若为 0 而 EXPAND_CALLS 增长，说明
+		// clearBuffers 未执行导致 position 跨帧累积 → 每帧反复重建 GL 缓冲。
+		com.namelessgod2008.core.AccelStats.RESET_CALLS ++;
+		com.namelessgod2008.core.AccelStats.RESET_MAX_POS =
+				Math.max(com.namelessgod2008.core.AccelStats.RESET_MAX_POS, position);
+
 		position = 0;
 	}
 

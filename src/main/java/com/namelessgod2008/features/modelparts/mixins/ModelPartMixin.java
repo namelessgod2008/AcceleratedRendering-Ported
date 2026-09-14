@@ -53,7 +53,12 @@ public class ModelPartMixin implements IAcceleratedRenderer<Void> {
     ) {
         AccelStats.COMPILE_CALLS ++;
 
+        // [临时探针] 计时：整个 compile 拦截的耗时
+        long probeStart = System.nanoTime();
+
         var extension = pBuffer.getAccelerated();
+
+        AccelStats.COMPILE_NANOS += System.nanoTime() - probeStart;
 
         // Only accelerate during world rendering — skip hand/GUI rendering
         if (!CoreFeature.isRenderingLevel()) {

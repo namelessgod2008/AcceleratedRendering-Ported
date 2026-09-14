@@ -68,6 +68,8 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 		var layer		= layers		.get			(layerIndex);
 
 		if (builder != null) {
+			AccelStats.REUSE_HITS ++;
+
 			var function = builder	.getFunction();
 				function			.addBefore	(before);
 				function			.addAfter	(after);
@@ -203,12 +205,18 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 			return;
 		}
 
+		// [临时探针] 实际绘制规模：层数 / buffer 数 / 最终 draw 数
+		long probeStart = System.nanoTime();
+		int  probeLayers	= 0;
+		int  probeContexts	= 0;
+
 		glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT
 				|		GL_ELEMENT_ARRAY_BARRIER_BIT
 				|		GL_COMMAND_BARRIER_BIT
 		);
 
 		for (		int layerIndex	: activeLayers) {
+			probeLayers ++;
 			for (	var buffer		: buffers) {
 				var function = buffer.getFunctions	().getOrDefault(layerIndex, EmptyLayerFunction	.INSTANCE);
 				var contexts = buffer.getLayers		().getOrDefault(layerIndex, EmptyLayerStorage	.INSTANCE).get(drawType);
@@ -270,6 +278,7 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 						com.mojang.blaze3d.systems.RenderSystem.bindDefaultUniforms(pass);
 
 						for (var drawContext : entry.getValue()) {
+							probeContexts ++;
 							drawContext.drawElements(pass, drawContext.getRenderType().mode());
 						}
 					}
@@ -280,6 +289,11 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 				buffer	.unbindVertexArray	();
 			}
 		}
+
+		// [临时探针] 累加实际绘制规模
+		AccelStats.DRAW_LAYERS		+= probeLayers;
+		AccelStats.DRAW_CONTEXTS	+= probeContexts;
+		AccelStats.DRAW_WALK_NANOS	+= System.nanoTime() - probeStart;
 	}
 
 	public void clearBuffers() {

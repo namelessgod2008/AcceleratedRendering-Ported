@@ -186,6 +186,7 @@ public class MeshUploadingProgramDispatcher {
 		AccelStats.MU_SPARSE += System.nanoTime() - t0;
 
 		long tDense			= System.nanoTime();
+		long dCpuStart		= AccelStats.cpuTime();
 		long dGroups		= 0L;
 		long dUploads		= 0L;
 		long dUploaders		= 0L;
@@ -236,16 +237,23 @@ public class MeshUploadingProgramDispatcher {
 						for (var uploader : overrideUploaders) {
 							dUploaders ++;
 
+							// [临时探针] 拆开 reserve 与 upload，定位 645ms 来源。
+							// 注意：不要在此循环内加更多 nanoTime()（每帧数万次调用会自身成为负载）。
+							long tRes = System.nanoTime();
 							var meshOffsets		= offsets		.reserve		(uploader);
 							var vertexOffset	= meshOffsets	.vertexOffset	();
 							var varyingOffset	= meshOffsets	.varyingOffset	();
 							var address			= infoBuffer	.reserve		(uploader.getMeshInfoSize());
-
+							long tUp = System.nanoTime();
 							uploader.upload(
 									address,
 									(int) vertexOffset,
 									(int) varyingOffset
 							);
+							long tEnd = System.nanoTime();
+
+							AccelStats.MD_RESERVE_NANOS	+= tUp  - tRes;
+							AccelStats.MD_UPLOAD_NANOS	+= tEnd - tUp;
 						}
 
 						AccelStats.MD_CPU_NANOS += System.nanoTime() - tCpu;
@@ -283,6 +291,10 @@ public class MeshUploadingProgramDispatcher {
 		AccelStats.MU_DENSE += System.nanoTime() - t0;
 
 		long dTotal = System.nanoTime() - tDense;
+
+		// [临时探针] 墙钟 vs 线程 CPU：若 CPU 远小于墙钟，说明本线程在此被阻塞（等 GPU/锁）
+		AccelStats.MD_DENSE_WALL_NANOS	+= dTotal;
+		AccelStats.MD_DENSE_CPU_NANOS	+= AccelStats.cpuTime() - dCpuStart;
 
 		if (dTotal > 2_000_000L && System.nanoTime() - lastSlowLog > 500_000_000L) {
 			lastSlowLog = System.nanoTime();

@@ -14,3 +14,15 @@ accessible field net/minecraft/client/model/geom/ModelPart$Vertex v F
 
 accessible class net/minecraft/client/renderer/OutlineBufferSource$EntityOutlineGenerator
 accessible method net/minecraft/client/renderer/OutlineBufferSource$EntityOutlineGenerator <init> (Lcom/mojang/blaze3d/vertex/VertexConsumer;I)V
+
+# 26.1: 为了让 INDIRECT 绘制路径能在 RenderPass 内提交 glDrawElementsIndirect，
+# 需访问以下包私有/受保护成员（原版未暴露 indirect 入口，vanilla 自身也不用）。
+accessible class com/mojang/blaze3d/opengl/GlRenderPass
+accessible class com/mojang/blaze3d/opengl/GlCommandEncoder
+accessible class com/mojang/blaze3d/opengl/GlDevice
+accessible field com/mojang/blaze3d/opengl/GlRenderPass pipeline Lcom/mojang/blaze3d/opengl/GlRenderPipeline;
+accessible field com/mojang/blaze3d/opengl/GlRenderPass vertexBuffers [Lcom/mojang/blaze3d/buffers/GpuBuffer;
+accessible field com/mojang/blaze3d/opengl/GlRenderPass indexBuffer Lcom/mojang/blaze3d/buffers/GpuBuffer;
+accessible field com/mojang/blaze3d/opengl/GlRenderPass indexType Lcom/mojang/blaze3d/vertex/VertexFormat$IndexType;
+accessible field com/mojang/blaze3d/systems/RenderPass backend Lcom/mojang/blaze3d/systems/RenderPassBackend;
+accessible field com/mojang/blaze3d/opengl/GlBuffer handle I
