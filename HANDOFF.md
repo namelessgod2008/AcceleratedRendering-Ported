@@ -13,6 +13,8 @@
 | 实体加速运行 | ✅ 视觉正常（模型/贴图/阴影/粒子），**用户已实测确认** |
 | 性能 | ✅ **240-291 fps**（1100 只羊场景；原版约 150 fps） |
 | NeoForge 配置界面 | ✅ 可用（Mod Menu → Accelerated Rendering → 配置） |
+| vanilla 渲染修复 | ✅ 已加回并**用户目视验证通过**（`FeatureRenderDispatcherMixin`） |
+| 阴影加速 | ❌ 未加回（`EntityRenderDispatcherMixin`） |
 | 其余功能（items/text/iris/geckolib/ftb 等） | ❌ 仍从编译排除（文件保留在磁盘），待逐项加回 |
 
 **⚠️ 项目根目录下的 `HANDOFF.md` 是本文件；`.decompile/` 是 MC 26.1 的全量反编译源码（6882 个 .java），查询任何 MC 类实现都在这里，已加入 `.gitignore`。**
@@ -58,6 +60,10 @@
 - **render pass 打开期间不得编码其它命令** → 纹理解析、uniform 写入必须在开 pass 前完成
 - **`readsAndWrites` 会把句柄内容移入新句柄**，必须写回字段
 - **`bindTexture` 在 sampler 为 null 时会静默跳过绑定** → 需兜底 sampler
+- **实体渲染是「提交-渲染两段式」**：`submit()` 只记录，顶点写入延后到
+  `FeatureRenderDispatcher` 阶段 —— 所以 1.21.4 那种「在渲染调用处 push defaultLayer」的
+  mixin 在 26.1 **全部失效**；正确做法是映射原版 `order(int)` 桶（详见
+  `memory/migration-26.1.md` 的「提交-渲染两段式」与 `entity-acceleration-migration.md`）
 - 其它：`ResourceLocation`→`Identifier`、`GuiGraphics`→`GuiGraphicsExtractor`、
   `RenderType`→`rendertype` 包、`BakedModel` 体系移除、`ItemRenderer`/`LightTexture`/`BufferUploader` 移除 等
 
@@ -78,8 +84,10 @@
 
 **首选**：从 `memory/migration-26.1.md` 的「待办」章节挑一项推进。优先级建议：
 
-1. **加回 vanilla 渲染修复**（`compat/vanilla.mixins.json`）—— `HumanoidArmorLayerMixin` /
-   `LivingEntityRendererMixin`。26.1 改为 `SubmitNodeCollector` 提交模式，旧注入点签名失效，需重写。
+1. ~~加回 vanilla 渲染修复~~ ✅ **已完成并验证**（2026-09-14）——
+   用户目视确认盔甲/纹饰顺序正确。实现见 `FeatureRenderDispatcherMixin` 的「order 桶 → 加速层」映射。
+   注意：1.21.4 的 `HumanoidArmorLayerMixin` / `LivingEntityRendererMixin` **文件仍在磁盘上但未注册**，
+   它们在 26.1 是死代码（提交段 push layer 无任何作用），不要误以为改它们能生效。
 2. **加回阴影加速**（`feature.entities.mixins.json` 的 `EntityRenderDispatcherMixin`）——
    26.1 移除 `renderBlockShadow`，改为 `EntityRenderState.shadowPieces` + `SubmitNodeCollector.submitShadow`。
 3. **清理诊断代码**（用户当前要求**暂时保留**，动它之前请先与用户确认）——

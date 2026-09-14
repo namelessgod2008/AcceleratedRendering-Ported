@@ -223,6 +223,70 @@ public class RenderTypeUtils {
 		}
 	}
 
+	private static Field LAYERING_TRANSFORM_FIELD;
+	private static Method GET_MODIFIER_METHOD;
+
+	static {
+		try {
+			Class<?> renderSetupClass = Class.forName("net.minecraft.client.renderer.rendertype.RenderSetup");
+			LAYERING_TRANSFORM_FIELD = renderSetupClass.getDeclaredField("layeringTransform");
+			LAYERING_TRANSFORM_FIELD.setAccessible(true);
+
+			GET_MODIFIER_METHOD = Class.forName("net.minecraft.client.renderer.rendertype.LayeringTransform")
+					.getDeclaredMethod("getModifier");
+			GET_MODIFIER_METHOD.setAccessible(true);
+		} catch (ReflectiveOperationException e) {
+			// 26.1 内部字段名若变化，此处失败，applyLayeringTransform 降级为 no-op
+		}
+	}
+
+	/**
+	 * 26.1: 应用 RenderType 的 layeringTransform 到 modelView 矩阵。
+	 *
+	 * <p>原版 {@code RenderType.draw} 在做 DynamicTransforms 之前会 push modelView 栈并应用该变换
+	 * （见 {@code LayeringTransform.VIEW_OFFSET_Z_LAYERING}），作用是沿深度方向微调，避免与共面几何
+	 * （如方块表面）z-fighting。加速路径自行拼 DynamicTransforms，必须补上这一步，否则
+	 * entity_shadow / entity_cutout / entity_solid / armor_cutout_no_cull / banner_pattern 等
+	 * 带 layering 的 RenderType 会闪烁。
+	 *
+	 * <p>无 layering（modifier 为 null）时原样返回入参，不产生额外分配。
+	 */
+	@SuppressWarnings("unchecked")
+	public static org.joml.Matrix4f applyLayeringTransform(RenderType renderType, org.joml.Matrix4f modelView) {
+		if (renderType == null || LAYERING_TRANSFORM_FIELD == null || GET_MODIFIER_METHOD == null) {
+			return modelView;
+		}
+
+		try {
+			Object state = STATE_FIELD.get(renderType);
+
+			if (state == null) {
+				return modelView;
+			}
+
+			Object layeringTransform = LAYERING_TRANSFORM_FIELD.get(state);
+
+			if (layeringTransform == null) {
+				return modelView;
+			}
+
+			var modifier = (java.util.function.Consumer<org.joml.Matrix4fStack>) GET_MODIFIER_METHOD.invoke(layeringTransform);
+
+			if (modifier == null) {
+				return modelView;
+			}
+
+			// 原版是在 modelViewStack 上 push 后施加；此处无栈，改为直接复合到给定矩阵。
+			// 变换形式为 scale/translate（见 ProjectionType），与矩阵左乘等价。
+			var stack = new org.joml.Matrix4fStack(4);
+			stack.set(modelView);
+			modifier.accept(stack);
+			return new org.joml.Matrix4f(stack);
+		} catch (ReflectiveOperationException e) {
+			return modelView;
+		}
+	}
+
 	public static boolean isCulled(RenderType renderType) {
 		if (renderType == null) {
 			return false;

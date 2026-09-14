@@ -20,6 +20,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * 1.21.4 update — render() now takes LivingEntityRenderState instead of LivingEntity.
  * RenderLayer.render() now takes (PoseStack, MultiBufferSource, int, EntityRenderState, float, float).
+ *
+ * 26.1: 本类【未注册】（见 acceleratedrendering.compat.vanilla.mixins.json）。
+ * 26.1 的 LivingEntityRenderer.render 已改为 submit，RenderLayer.render 已改为 submit，
+ * 二者都只往 SubmitNodeCollector 记录、不写顶点；在此处 push defaultLayer 没有任何作用
+ * （读它时栈已弹回 0）。渲染层的顺序改由 FeatureRenderDispatcherMixin 通过
+ * 「order 桶 → 加速层」映射承担。
  */
 @Mixin(LivingEntityRenderer.class)
 public class LivingEntityRendererMixin {

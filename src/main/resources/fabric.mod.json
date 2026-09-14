@@ -27,6 +27,8 @@
   },
   "mixins": [
     "acceleratedrendering.core.mixins.json",
+    "acceleratedrendering.compat.vanilla.mixins.json",
+    "acceleratedrendering.feature.entities.mixins.json",
     "acceleratedrendering.feature.modelparts.mixins.json"
   ],
   "depends": {

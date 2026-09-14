@@ -134,9 +134,12 @@ public class BaseVertexDrawContextPool extends SimpleResetPool<BaseVertexDrawCon
 
 			this.preparedTextures = RenderTypeUtils.getTextures(renderType);
 
-			// 与原版 RenderType.draw 一致：DynamicTransforms 在 pass 外写入
+			// 与原版 RenderType.draw 一致：DynamicTransforms 在 pass 外写入。
+			// 原版在写之前会把 RenderType 的 layeringTransform 施加到 modelView 栈上
+			// （VIEW_OFFSET_Z_LAYERING 等，用于避免与共面几何 z-fighting），此处必须补上，
+			// 否则 entity_shadow 等 RenderType 会闪烁。
 			this.preparedTransforms = RenderSystem.getDynamicUniforms().writeTransform(
-					RenderSystem.getModelViewMatrix(),
+					RenderTypeUtils.applyLayeringTransform(renderType, RenderSystem.getModelViewMatrix()),
 					new Vector4f(1.0F, 1.0F, 1.0F, 1.0F),
 					new Vector3f(),
 					RenderTypeUtils.getTextureMatrix(renderType)

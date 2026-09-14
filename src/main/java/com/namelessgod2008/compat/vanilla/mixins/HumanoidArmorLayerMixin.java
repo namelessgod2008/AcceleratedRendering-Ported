@@ -19,6 +19,12 @@ import org.spongepowered.asm.mixin.injection.At;
 /**
  * 1.21.4 update — renderArmorPiece now takes ItemStack instead of LivingEntity.
  * renderTrim no longer exists; trim is now handled by EquipmentLayerRenderer.renderLayers.
+ *
+ * 26.1: 本类【未注册】（见 acceleratedrendering.compat.vanilla.mixins.json）。
+ * 26.1 的 EquipmentLayerRenderer.renderLayers 已改为「提交」模式（只往 SubmitNodeCollector
+ * 记录，不写顶点），且签名变为带 SubmitNodeCollector 的 9/11 参数，旧的 WrapOperation 目标
+ * 已不存在；在此处 push defaultLayer 没有任何作用（读它时栈已弹回 0）。
+ * 盔甲纹饰的渲染顺序改由 FeatureRenderDispatcherMixin 通过「order 桶 → 加速层」映射承担。
  */
 @Mixin(HumanoidArmorLayer.class)
 public class HumanoidArmorLayerMixin {

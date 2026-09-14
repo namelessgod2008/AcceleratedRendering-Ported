@@ -5,8 +5,7 @@
   "package": "com.namelessgod2008.compat.vanilla.mixins",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "HumanoidArmorLayerMixin",
-    "LivingEntityRendererMixin"
+    "FeatureRenderDispatcherMixin"
   ],
   "injectors": {
     "defaultRequire": 1

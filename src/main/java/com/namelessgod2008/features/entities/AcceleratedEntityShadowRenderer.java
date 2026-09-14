@@ -4,17 +4,25 @@ import com.namelessgod2008.core.buffers.accelerated.builders.VertexConsumerExten
 import com.namelessgod2008.core.buffers.accelerated.renderers.IAcceleratedRenderer;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import lombok.experimental.ExtensionMethod;
-import net.minecraft.core.BlockPos;
-import com.namelessgod2008.core.utils.FastColorCompat;
-import net.minecraft.util.Mth;
-import net.minecraft.world.level.LevelReader;
-import net.minecraft.world.level.block.RenderShape;
-import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.util.ARGB;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
-import org.joml.Vector2f;
-import org.joml.Vector3f;
 
+/**
+ * 26.1 阴影加速渲染器。
+ *
+ * <p>与 1.21.4 的差别：1.21.4 由 {@code EntityRenderDispatcher.renderBlockShadow} 在绘制时
+ * 现算「方块可见性、亮度、碰撞形状、alpha」，因此 1.21.4 的 Context 需要
+ * {@code levelReader}/{@code chunkAccess}/{@code blockPos} 才能做这些判断。
+ * 26.1 已把判断全部前移到 {@code EntityRenderer.extractShadowPiece}（提交段），
+ * 产出 {@code EntityRenderState.ShadowPiece(relativeX, relativeY, relativeZ, shapeBelow, alpha)}，
+ * 顶点写入阶段拿不到世界/区块，也不需要——数据已是判定后的结果。
+ *
+ * <p>故此处 Context 直接承载 ShadowPiece 的字段。逐顶点几何与 26.1
+ * {@code ShadowFeatureRenderer.renderTranslucent} 逐行等价（形状包围盒 + 相对偏移 + 以半径
+ * 归一化的 uv），仅换成走加速管线写入。
+ */
 @ExtensionMethod(VertexConsumerExtension.class)
 public class AcceleratedEntityShadowRenderer implements IAcceleratedRenderer<AcceleratedEntityShadowRenderer.Context> {
 
@@ -31,132 +39,61 @@ public class AcceleratedEntityShadowRenderer implements IAcceleratedRenderer<Acc
 			int				color
 	) {
 		var extension	= vertexConsumer	.getAccelerated	();
-		var levelReader	= context			.levelReader	();
-		var chunkAccess	= context			.chunkAccess	();
-		var blockPos	= context			.blockPos		();
-		var center		= context			.center			();
-		var size		= context			.size			();
-		var weight		= context			.weight			();
+		var radius		= context			.radius			();
+		var bounds		= context			.shapeBelow		().bounds		();
+		var relativeX	= context			.relativeX		();
+		var relativeY	= context			.relativeY		();
+		var relativeZ	= context			.relativeZ		();
 
-		var belowPos	= context.blockPos().below			();
-		var blockState	= chunkAccess		.getBlockState	(belowPos);
+		var minX = relativeX + (float) bounds.minX;
+		var maxX = relativeX + (float) bounds.maxX;
+		var minY = relativeY + (float) bounds.minY;
+		var minZ = relativeZ + (float) bounds.minZ;
+		var maxZ = relativeZ + (float) bounds.maxZ;
 
-		if (blockState.getRenderShape() == RenderShape.INVISIBLE) {
-			return;
-		}
+		var u0 = -minX / 2.0f / radius + 0.5f;
+		var u1 = -maxX / 2.0f / radius + 0.5f;
+		var v0 = -minZ / 2.0f / radius + 0.5f;
+		var v1 = -maxZ / 2.0f / radius + 0.5f;
 
-		var levelBrightness = levelReader.getMaxLocalRawBrightness(blockPos);
-
-		if (levelBrightness <= 3) {
-			return;
-		}
-
-		if (!blockState.isCollisionShapeFullBlock(chunkAccess, belowPos)) {
-			return;
-		}
-
-		var voxelShape = blockState.getShape(chunkAccess, belowPos);
-
-		if (voxelShape.isEmpty()) {
-			return;
-		}
-
-		// 26.1: LightTexture 已移除，内联原 getBrightness(DimensionType, levelBrightness) 语义：
-		// b = levelBrightness/15, lerp(dimensionType.ambientLight(), (4-3b)/4, 1)
-		var dimensionBrightness	= Mth.lerp(levelReader.dimensionType().ambientLight(), (4.0f - 3.0f * (levelBrightness / 15.0f)) / 4.0f, 1.0f);
-		var shadowTransparency	= weight * 0.5f * dimensionBrightness * 255.0f;
-
-		if (shadowTransparency < 0.0f) {
-			return;
-		}
-
-		if (shadowTransparency > 255.0f) {
-			shadowTransparency = 255.0f;
-		}
-
-		var shadowColor	= FastColorCompat.ABGR32	.fromArgb32(FastColorCompat.ARGB32.color((int) shadowTransparency, color));
-		var bounds		= voxelShape		.bounds	();
-
-		var minX = blockPos.getX() + (float) bounds.minX;
-		var maxX = blockPos.getX() + (float) bounds.maxX;
-		var minY = blockPos.getY() + (float) bounds.minY;
-		var minZ = blockPos.getZ() + (float) bounds.minZ;
-		var maxZ = blockPos.getZ() + (float) bounds.maxZ;
-
-		var minPosX = minX - center.x;
-		var maxPosX = maxX - center.x;
-		var minPosY = minY - center.y;
-		var minPosZ = minZ - center.z;
-		var maxPosZ = maxZ - center.z;
-
-		var u0 = -minPosX / 2.0f / size + 0.5f;
-		var u1 = -maxPosX / 2.0f / size + 0.5f;
-		var v0 = -minPosZ / 2.0f / size + 0.5f;
-		var v1 = -maxPosZ / 2.0f / size + 0.5f;
+		// 26.1 原版为 ARGB.white(piece.alpha())；addVertex 内部会转成 GPU 期望的 ABGR
+		var shadowColor = ARGB.white(context.alpha());
 
 		extension.beginTransform(transform, normal);
 
-		var positions = new Vector3f[] {
-				new Vector3f(minPosX, minPosY, minPosZ),
-				new Vector3f(minPosX, minPosY, maxPosZ),
-				new Vector3f(maxPosX, minPosY, maxPosZ),
-				new Vector3f(maxPosX, minPosY, minPosZ),
-		};
-
-		var texCoords = new Vector2f[] {
-				new Vector2f(u0, v0),
-				new Vector2f(u0, v1),
-				new Vector2f(u1, v1),
-				new Vector2f(u1, v0),
-		};
-
-		for (var i = 0; i < 4; i ++) {
-			var position = positions[i];
-			var texCoord = texCoords[i];
-
-			vertexConsumer.addVertex(
-					position.x,
-					position.y,
-					position.z,
-					shadowColor,
-					texCoord.x,
-					texCoord.y,
-					overlay,
-					light,
-					0.0f,
-					1.0f,
-					0.0f
-			);
-		}
+		vertexConsumer.addVertex(minX, minY, minZ, shadowColor, u0, v0, overlay, light, 0.0f, 1.0f, 0.0f);
+		vertexConsumer.addVertex(minX, minY, maxZ, shadowColor, u0, v1, overlay, light, 0.0f, 1.0f, 0.0f);
+		vertexConsumer.addVertex(maxX, minY, maxZ, shadowColor, u1, v1, overlay, light, 0.0f, 1.0f, 0.0f);
+		vertexConsumer.addVertex(maxX, minY, minZ, shadowColor, u1, v0, overlay, light, 0.0f, 1.0f, 0.0f);
 
 		extension.endTransform();
 	}
 
 	public static Context context(
-			LevelReader	levelReader,
-			ChunkAccess	chunkAccess,
-			BlockPos	blockPos,
-			Vector3f	center,
-			float		size,
-			float		weight
+			float		relativeX,
+			float		relativeY,
+			float		relativeZ,
+			VoxelShape	shapeBelow,
+			float		radius,
+			float		alpha
 	) {
 		return new Context(
-				levelReader,
-				chunkAccess,
-				blockPos,
-				center,
-				size,
-				weight
+				relativeX,
+				relativeY,
+				relativeZ,
+				shapeBelow,
+				radius,
+				alpha
 		);
 	}
 
 	public record Context(
-			LevelReader	levelReader,
-			ChunkAccess	chunkAccess,
-			BlockPos	blockPos,
-			Vector3f	center,
-			float		size,
-			float		weight
+			float		relativeX,
+			float		relativeY,
+			float		relativeZ,
+			VoxelShape	shapeBelow,
+			float		radius,
+			float		alpha
 	) {
 
 	}

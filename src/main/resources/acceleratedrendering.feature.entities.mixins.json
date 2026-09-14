@@ -5,7 +5,7 @@
   "package": "com.namelessgod2008.features.entities.mixins",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "EntityRenderDispatcherMixin"
+    "ShadowFeatureRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1
