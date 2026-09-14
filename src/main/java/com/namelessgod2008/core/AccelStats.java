@@ -90,6 +90,9 @@ public final class AccelStats {
 	public static long MD_RESERVE_NANOS	= 0L;	// offsets.reserve + infoBuffer.reserve
 	public static long MD_UPLOAD_NANOS	= 0L;	// uploader.upload（纯内存写）
 
+	// ---- 物品加速（临时探针）----
+	public static long ITEM_CALLS	= 0L;
+
 	// ---- 缓冲归零（临时探针，判定「预热不收敛」）----
 	public static long RESET_CALLS		= 0L;	// MappedBuffer.reset() 次数
 	public static long RESET_MAX_POS	= 0L;	// reset 时观察到的最大 position（应远小于容量）
@@ -195,7 +198,7 @@ public final class AccelStats {
 				+ " mdInst=" + MD_INSTANCES
 				+ " mdMeshVerts=" + MD_MESH_VERTS
 				+ " mdWg=" + MD_WORKGROUPS
-				+ " pool=" + RING_POOL_SIZE
+				+ " pool=" + RING_POOL_SIZE + " it=" + ITEM_CALLS
 				+ " ||| shadow=" + (SHADOW_NANOS / 1_000_000L) + "ms/s"
 				+ " shadowMiss=" + (SHADOW_MISS_NANOS / 1_000_000L) + "ms/s"
 				+ " sCalls=" + SHADOW_CALLS
@@ -274,6 +277,7 @@ public final class AccelStats {
 		DRAW_CONTEXTS	= 0L;
 		DRAW_WALK_NANOS	= 0L;
 		POOL_EXPANDS	= 0L;
+		ITEM_CALLS		= 0L;
 		POOL_CREATES	= 0L;
 		REUSE_HITS		= 0L;
 		RESET_CALLS		= 0L;

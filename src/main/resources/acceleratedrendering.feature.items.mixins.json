@@ -5,18 +5,7 @@
   "package": "com.namelessgod2008.features.items.mixins",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "ItemRendererMixin",
-    "accessors.BlockColorsAccessor",
-    "gui.AbstractContainerScreenMixin",
-    "gui.FontMixin",
-    "gui.GuiGraphicsMixin",
-    "gui.GuiMixin",
-    "models.BakedModelMixin",
-    "models.BakedQuadMixin",
-    "models.MultipartBakedModelMixin",
-    "models.SimpleBakedModelMixin",
-    "models.WeightedBakedModelMixin",
-    "ModelBlockRendererMixin"
+    "ItemFeatureRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

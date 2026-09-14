@@ -304,10 +304,14 @@ public class RenderTypeUtils {
 			return false;
 		}
 
-		// 26.1 commodity: textureTransform 封装于私有 RenderSetup，无公开等价；
-		// 保守判断：实体渲染的 RenderType 均视为非动态，避免误走动态分支。
-		return false;
+		// 26.1: textureTransform 封装于私有 RenderSetup，无公开等价，故反射读取。
+		// 非单位矩阵即视为「动态」（纹理坐标随帧变化，如附魔光效、动画纹理），
+		// 这类 RenderType 的顶点不能被跨帧缓存，否则贴图会错乱。
+		return !getTextureMatrix(renderType).equals(UNIT_MATRIX);
 	}
+
+	/** 单位矩阵常量，用于 {@link #isDynamic} 比较（避免每次 new）。 */
+	private static final org.joml.Matrix4f UNIT_MATRIX = new org.joml.Matrix4f();
 
 	public static boolean hasDepth(RenderType renderType) {
 		if (renderType == null) {
