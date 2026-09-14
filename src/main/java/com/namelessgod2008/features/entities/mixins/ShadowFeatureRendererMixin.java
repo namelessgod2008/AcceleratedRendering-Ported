@@ -59,9 +59,6 @@ public class ShadowFeatureRendererMixin {
 
 	@Unique private static final Matrix3f SHADOW_NORMAL_MATRIX = new Matrix3f().identity();
 
-	// [临时探针] 验证 priority 修复后分支确实执行；确认后移除
-	@Unique private static int probeCalls = 0;
-
 	@Inject(
 			method		= "renderTranslucent",
 			at			= @At("HEAD"),

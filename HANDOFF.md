@@ -14,8 +14,12 @@
 | 性能 | ✅ **240-291 fps**（1100 只羊场景；原版约 150 fps） |
 | NeoForge 配置界面 | ✅ 可用（Mod Menu → Accelerated Rendering → 配置） |
 | vanilla 渲染修复 | ✅ 已加回并**用户目视验证通过**（`FeatureRenderDispatcherMixin`） |
-| 阴影加速 | ❌ 未加回（`EntityRenderDispatcherMixin`） |
+| 阴影加速 | ✅ **已加回并用户目视验证通过**（`ShadowFeatureRendererMixin`） |
+| layeringTransform（z-fighting 闪烁） | ✅ 已修复（`RenderTypeUtils.applyLayeringTransform`） |
 | 其余功能（items/text/iris/geckolib/ftb 等） | ❌ 仍从编译排除（文件保留在磁盘），待逐项加回 |
+
+> **⚠️ 本轮改动尚未提交 git**（HEAD 仍是 `93e25c4`）。vanilla 修复 + 阴影加速 + layering 修复
+> 都还在工作区，建议先提交一次再继续开发，避免改坏无兜底。
 
 **⚠️ 项目根目录下的 `HANDOFF.md` 是本文件；`.decompile/` 是 MC 26.1 的全量反编译源码（6882 个 .java），查询任何 MC 类实现都在这里，已加入 `.gitignore`。**
 
@@ -33,6 +37,7 @@
    | `entity-acceleration-migration.md` | **最重要** —— 实体加速的绘制通道实现、26.1 时序约束、性能修复、一次错误修改的教训 |
    | `build-system.md` | 构建系统、依赖版本、sourceSets 排除列表 |
    | `migration-26.1.md` | 移植全记录、26.1 API 重构要点、**剩余待办清单** |
+   | `shadow-acceleration-26-1.md` | **新增** —— 阴影加速实现、Sodium 优先级冲突、layeringTransform 闪烁陷阱 |
    | `log.md` | 日志位置、`[AR-FRAME]`/`[AR-SLOW]` 格式说明与正常/异常样本 |
 
 3. **1.21.4 原项目的记忆库**（架构参考，大量专题文件）：
@@ -88,8 +93,18 @@
    用户目视确认盔甲/纹饰顺序正确。实现见 `FeatureRenderDispatcherMixin` 的「order 桶 → 加速层」映射。
    注意：1.21.4 的 `HumanoidArmorLayerMixin` / `LivingEntityRendererMixin` **文件仍在磁盘上但未注册**，
    它们在 26.1 是死代码（提交段 push layer 无任何作用），不要误以为改它们能生效。
-2. **加回阴影加速**（`feature.entities.mixins.json` 的 `EntityRenderDispatcherMixin`）——
-   26.1 移除 `renderBlockShadow`，改为 `EntityRenderState.shadowPieces` + `SubmitNodeCollector.submitShadow`。
+2. ~~加回阴影加速~~ ✅ **已完成并验证**（2026-09-14）——
+   26.1 把 `renderBlockShadow` 拆成「`extractShadowPiece` 判定」+「`ShadowFeatureRenderer.renderTranslucent`
+   写顶点」两段，注入点必须落在**渲染段**（提交段拿不到 `VertexConsumer`）。
+   新增 `ShadowFeatureRendererMixin`（`feature.entities.mixins.json`），
+   **必须 `priority = 999`**：Sodium 0.9.1 也注入该方法且开头就无条件 `cancel`，同优先级下 Sodium 先执行、
+   本 mod 的 mixin 永不触发。旧的 `EntityRenderDispatcherMixin` 已删除（目标方法不存在）。
+   细节见 `memory/shadow-acceleration-26-1.md`。
+2b. ✅ **layeringTransform 缺失（全局闪烁）已修复** —— 加速路径写 `DynamicTransforms` 时漏了
+   RenderType 的 `layeringTransform`（1.21.4 靠 `renderType.setupRenderState()` 隐式完成）。
+   影响 `entity_shadow`/`entity_cutout`/`entity_solid`/`armor_cutout_no_cull`/`banner_pattern` 等
+   所有带 layering 的 RenderType。修复见 `RenderTypeUtils.applyLayeringTransform` +
+   `BaseVertexDrawContextPool.prepareDraw`。**注意 `getModelViewMatrix()` 返回的是全局栈本身，不可直接改。**
 3. **清理诊断代码**（用户当前要求**暂时保留**，动它之前请先与用户确认）——
    `core/AccelStats.java` 及各处埋点，会每秒打印 `[AR-FRAME]`。
 4. **逐项加回其余功能**：从 `build.gradle` 的 `sourceSets` 排除列表中移除并适配。
