@@ -7,21 +7,51 @@
 
 ## 一、当前状态（务必先看）
 
+> **HEAD = `01c564c`**（"totally fix entity disappearing issue"），工作区干净、与 HEAD 零差异。
+
 | 项目 | 状态 |
 |---|---|
-| `./gradlew build` | ✅ 通过 |
-| 实体加速运行 | ✅ 视觉正常（模型/贴图/阴影/粒子），**用户已实测确认** |
-| 性能 | ✅ **240-291 fps**（1100 只羊场景；原版约 150 fps） |
-| NeoForge 配置界面 | ✅ 可用（Mod Menu → Accelerated Rendering → 配置） |
-| vanilla 渲染修复 | ✅ 已加回并**用户目视验证通过**（`FeatureRenderDispatcherMixin`） |
-| 阴影加速 | ✅ **已加回并用户目视验证通过**（`ShadowFeatureRendererMixin`） |
-| layeringTransform（z-fighting 闪烁） | ✅ 已修复（`RenderTypeUtils.applyLayeringTransform`） |
-| 其余功能（items/text/iris/geckolib/ftb 等） | ❌ 仍从编译排除（文件保留在磁盘），待逐项加回 |
+| `./gradlew build` / `compileJava` | ✅ 通过 |
+| 实体加速（无光影） | ✅ 视觉正常、**240-291 fps**（1100 只羊场景，原版约 150 fps） |
+| 实体加速（**开光影**） | ✅ **不透明实体正常**（羊/箱子/守卫者/铁傀儡/熊猫），阴影正常 —— 2026-09-20 修复 |
+| 半透明实体（开光影） | ⚠️ **回退原版管线**（`force_translucent_acceleration = DISABLED`），加速路径有未突破的架构障碍，见下 |
+| **实体堆叠闪烁** | ❌ **未解决** —— 多只羊堆叠时遮挡关系持续闪烁，**无光影也复现**，`01c564c` 即存在 |
+| 阴影加速 | ✅ 已加回并验证（`ShadowFeatureRendererMixin`，priority=999 压制 Sodium） |
+| layeringTransform（z-fighting） | ✅ 已修复（`RenderTypeUtils.applyLayeringTransform`） |
+| 其余功能（items GIU/text/geckolib/ftb 等） | ❌ 仍从编译排除（文件保留在磁盘），待逐项加回 |
 
-> **⚠️ 本轮改动尚未提交 git**（HEAD 仍是 `93e25c4`）。vanilla 修复 + 阴影加速 + layering 修复
-> 都还在工作区，建议先提交一次再继续开发，避免改坏无兜底。
+### 当前两个已知问题
 
-**⚠️ 项目根目录下的 `HANDOFF.md` 是本文件；`.decompile/` 是 MC 26.1 的全量反编译源码（6882 个 .java），查询任何 MC 类实现都在这里，已加入 `.gitignore`。**
+**1. 实体堆叠闪烁（未解决，优先排查）**
+- 症状：多只羊堆叠时遮挡关系持续闪烁；**关闭光影同样复现** → 与 Iris 无关
+- `force_translucent_acceleration` 开/关都闪
+- 已排除：Iris gbuffer 重定向、本次会话的全部 Iris 改动（回退后仍闪）
+- **首要下一步**：关闭实体加速（走 vanilla）是否还闪 —— 这是区分「加速路径引入」与
+  「26.1 本身/其它 mod」的关键对照实验
+- 详见 `memory/entity-stacking-flicker.md`
+
+**2. 半透明实体在光影下无法加速（架构障碍，已回退）**
+- 根因链（全部有实测证据）：
+  1. Photon 的半透明实体程序是 `DRAWBUFFERS:01` → **需 2 个 color attachment（MRT）**
+  2. 而 26.1 的 `createRenderPass` **只支持单 color view**
+     （`DirectStateAccess.bindFrameBufferTextures` 硬编码 `COLOR_ATTACHMENT0` + `DEPTH_ATTACHMENT`）
+  3. 单附件 FBO 的 `DRAW_BUFFER1` 默认 `GL_NONE` → `location=1` 输出被静默丢弃
+  4. 本该由 Iris 的 `ExtendedShader.iris$setupState` 换成 MRT FBO，但它没执行 ——
+     实测 `programCls=GlProgram`（vanilla）、`isIrisProgram=false`、`overrideShaders=false`
+  5. `overrideShaders = isRenderingWorld && isMainBound`，而 `isMainBound` 只在
+     「绑主渲染目标」时为 true —— 我们的自建 FBO 永远拿不到（**循环依赖**）
+- **当前策略**：默认 `DISABLED`，半透明回退原版（已验证正常）
+- 详见 `memory/iris-shader-entity-invisible.md` 的「2026-09-20 补充」章节
+
+> **⚠️ 本轮（2026-09-20）尝试过但已回退的方案**：按 OPAQUE/TRANSLUCENT 拆两个绘制时机
+> + `GlCommandEncoder.trySetup` RETURN 重定向 + 强制 `setIsMainBound`。
+> **不透明实体确实修好了**（用户确认「箱子和羊全部正常显示」），但引入了/未消除堆叠闪烁，
+> 故整体回退。**将来重做时可直接参考上述根因分析**，不必重新排查。
+
+**⚠️ 项目根目录下的 `HANDOFF.md` 是本文件；`.decompile/` 是 MC 26.1 的全量反编译源码，已加入 `.gitignore`。
+另有两份反编译产物供静态分析（不在仓库内）：**
+- `/d/Programs/MC/26.1/_analysis/iris_rt` —— Iris 1.11.4（运行时实际版本）
+- `/d/Programs/MC/26.1/_analysis/mc` —— MC 26.1 未混淆
 
 ---
 
@@ -33,11 +63,17 @@
 2. **本项目的记忆库**：`C:\Users\xzx\.claude\projects\D--Programs-MC-26-1-AcceleratedRendering-Ported\memory\`
    | 文件 | 内容 |
    |---|---|
-   | `project-overview.md` | 项目概况、关键差异、文档索引 |
    | `entity-acceleration-migration.md` | **最重要** —— 实体加速的绘制通道实现、26.1 时序约束、性能修复、一次错误修改的教训 |
+   | `iris-shader-entity-invisible.md` | **2026-09-20 核心** —— 光影下实体消失的完整根因链 + 半透明加速的 MRT 架构障碍 |
+   | `entity-stacking-flicker.md` | **2026-09-20 未解决** —— 实体堆叠闪烁（无光影也复现） |
+   | `iris-outerwrapped-rendertype-unwrap.md` | Iris 包装 RenderType 必须在 `getBuffer` 入口解包，否则方块实体消失 |
+   | `iris-vertexformat-padding-not-needed.md` | Iris 1.11.4 自带顶点对齐，旧 padding mixin 会导致 58 字节崩溃 |
+   | `perf-10fps-investigation.md` | JDK 25 + LWJGL FFM 后端的反射级开销（10fps 卡顿结案） |
+   | `indirect-draw-26-1.md` | INDIRECT 绘制：RenderPass 无 indirect 入口，用 mixin + 静态桥接 |
+   | `item-acceleration-26-1.md` | 物品加速：BakedQuad 是自包含 record，GUI 部分未加回 |
+   | `shadow-acceleration-26-1.md` | 阴影加速、Sodium 优先级冲突、layeringTransform 闪烁陷阱 |
    | `build-system.md` | 构建系统、依赖版本、sourceSets 排除列表 |
-   | `migration-26.1.md` | 移植全记录、26.1 API 重构要点、**剩余待办清单** |
-   | `shadow-acceleration-26-1.md` | **新增** —— 阴影加速实现、Sodium 优先级冲突、layeringTransform 闪烁陷阱 |
+   | `migration-26.1.md` | 移植全记录、26.1 API 重构要点、剩余待办清单 |
    | `log.md` | 日志位置、`[AR-FRAME]`/`[AR-SLOW]` 格式说明与正常/异常样本 |
 
 3. **1.21.4 原项目的记忆库**（架构参考，大量专题文件）：
@@ -87,29 +123,30 @@
 
 ## 五、下一步该做什么
 
-**首选**：从 `memory/migration-26.1.md` 的「待办」章节挑一项推进。优先级建议：
+按优先级：
 
-1. ~~加回 vanilla 渲染修复~~ ✅ **已完成并验证**（2026-09-14）——
-   用户目视确认盔甲/纹饰顺序正确。实现见 `FeatureRenderDispatcherMixin` 的「order 桶 → 加速层」映射。
-   注意：1.21.4 的 `HumanoidArmorLayerMixin` / `LivingEntityRendererMixin` **文件仍在磁盘上但未注册**，
-   它们在 26.1 是死代码（提交段 push layer 无任何作用），不要误以为改它们能生效。
-2. ~~加回阴影加速~~ ✅ **已完成并验证**（2026-09-14）——
-   26.1 把 `renderBlockShadow` 拆成「`extractShadowPiece` 判定」+「`ShadowFeatureRenderer.renderTranslucent`
-   写顶点」两段，注入点必须落在**渲染段**（提交段拿不到 `VertexConsumer`）。
-   新增 `ShadowFeatureRendererMixin`（`feature.entities.mixins.json`），
-   **必须 `priority = 999`**：Sodium 0.9.1 也注入该方法且开头就无条件 `cancel`，同优先级下 Sodium 先执行、
-   本 mod 的 mixin 永不触发。旧的 `EntityRenderDispatcherMixin` 已删除（目标方法不存在）。
-   细节见 `memory/shadow-acceleration-26-1.md`。
-2b. ✅ **layeringTransform 缺失（全局闪烁）已修复** —— 加速路径写 `DynamicTransforms` 时漏了
-   RenderType 的 `layeringTransform`（1.21.4 靠 `renderType.setupRenderState()` 隐式完成）。
-   影响 `entity_shadow`/`entity_cutout`/`entity_solid`/`armor_cutout_no_cull`/`banner_pattern` 等
-   所有带 layering 的 RenderType。修复见 `RenderTypeUtils.applyLayeringTransform` +
-   `BaseVertexDrawContextPool.prepareDraw`。**注意 `getModelViewMatrix()` 返回的是全局栈本身，不可直接改。**
-3. **清理诊断代码**（用户当前要求**暂时保留**，动它之前请先与用户确认）——
+1. **【最高】排查实体堆叠闪烁**（未解决，见第一节）
+   首个对照实验：**关闭实体加速，看是否还闪**。
+   - 若不闪 → 问题在加速路径（深度精度 / 绘制顺序 / 深度写入状态）
+   - 若仍闪 → 问题在 26.1 本身或其它 mod（Sodium / Iris / 光影包）
+   细节与已排除项见 `memory/entity-stacking-flicker.md`。
+
+2. **【高】半透明实体在光影下的加速**（架构障碍，见第一节）
+   三条候选路径（均未实施）：
+   1. 复用 Iris 的 `GlFramebuffer` 实例（读 `ExtendedShader` 的 private 字段，需 mixin 暴露）
+   2. 自建 MRT FBO（`IrisRenderSystem.framebufferTexture2D` + `drawBuffers`）—— 复制 Iris 逻辑，版本升级易碎
+   3. 按 RenderType 分组，让每个程序各开一个 RenderPass（绕开 `isSetup` 守卫）
+   **注意**：重做时第一天做过的「OPAQUE/TRANSLUCENT 拆分 + `trySetup` 重定向」确实修好了
+   不透明实体，可直接参考 —— 但需先解决/排除它与堆叠闪烁的关系。
+
+3. 逐项加回其余功能：从 `build.gradle` 的 `sourceSets` 排除列表中移除并适配
+   （items GUI 部分、text、geckolib、ftb、modernui、tlm、create、emf 等）。
+
+4. 清理诊断代码（用户当前要求**暂时保留**，动它之前请先与用户确认）——
    `core/AccelStats.java` 及各处埋点，会每秒打印 `[AR-FRAME]`。
-4. **逐项加回其余功能**：从 `build.gradle` 的 `sourceSets` 排除列表中移除并适配。
+
 5. 其它：`TextureUtils.downloadTexture`（26.1 需 `GpuDevice` command encoder）、
-   INDIRECT 绘制路径、trinkets 配置项未翻译警告。
+   trinkets 配置项未翻译警告。
 
 ---
 
@@ -134,6 +171,36 @@ grep -iE "Exception|ERROR|Mixin apply for" run/logs/latest.log | tail -30
 **诊断日志含义与正常/异常样本**见 `memory/log.md`。
 简言之：`[AR-SLOW]` 若只在**进世界头几帧**出现属正常（预热）；若**持续出现**则需排查
 （先看 `cpu` vs `submit` 的分布）。
+
+### RenderDoc 抓帧分析（2026-09-20 建立）
+
+**Loom 自带集成**（推荐）：
+
+```bash
+./gradlew runClientRenderDoc     # 自动下载并注入 renderdoccmd，进世界按 F12 抓帧
+./gradlew startRenderDocUI       # 单独开 RenderDoc 界面
+```
+
+⚠️ **不要**改写成 `renderdoccmd capture ... gradlew runClient` —— Gradle daemon 是常驻进程，
+被 hook 的会是 Gradle 而非游戏。Loom 的做法是直接以 `javaLauncher + allJvmArgs` 拉起游戏 JVM。
+
+**命令行分析抓帧**（无 GUI，`tools/rd_auto.py`）：
+
+```bash
+RD_CAPTURE=<x.rdc> qrenderdoc.exe --python tools/rd_auto.py
+# 全量扫描（慢，慎用）：RD_SCAN_ALL=1
+```
+
+本机 RenderDoc（`D:\ProgramApps\RenderDoc_1.46_64`）的 Python API 与新版不同：
+无 `GetReplayManager` / `GetCaptureFilePath` / `CurEvent`；用 `OpenCaptureFile` + `OpenCapture`，
+`GetPipelineState()` 返回 `PipeState`。脚本末尾需 `sys.exit(0)` 才能退出。
+
+⚠️ **遍历全部 draw 逐个 `SetFrameEvent` 会假死**（每次都要重放整帧），必须采样或限定 eventId。
+
+**排查心得**：`glMultiDrawElementsBaseVertex` 是 Sodium 的地形渲染；
+本 mod 用 `pass.drawIndexed`（非 Multi）。用「顶点属性名」区分程序最可靠
+（`iris_Entity`/`at_tangent` = Iris ENTITY 格式；`mc_Entity`/`at_midBlock` = TERRAIN）。
+
 
 ---
 
