@@ -10,29 +10,20 @@ loom {
 	accessWidenerPath = file("src/main/resources/acceleratedrendering.accesswidener")
 }
 
-// ⚠️ 性能关键：强制 LWJGL 使用 `unsafe` 变体（JNI/Unsafe 后端），禁用 FFM 后端。
-//
-// 背景（2026-09-14 实测定位）：LWJGL 3.4.1 在 JDK 25 上会自动启用 FFM 后端
+// ⚠️ 已知性能陷阱：LWJGL 3.4.1 在 JDK 25 上会自动启用 FFM 后端
 // （jar 内 `META-INF/versions/25/` 覆盖根目录实现），其 memPutXxx 内部为
 // `VarHandle.set` + `MemorySegment.reinterpret` + `Reflection.getCallerClass`。
-// 在 JIT 完成内联前，每次调用要付反射级开销（实测游戏内 Render thread CPU 占用 91%，
-// 导致 fps 从 150+ 掉到 5-6 且长期不收敛，且是否发作取决于 JIT 编译时机 → 表现为「随机」）。
+// JIT 完成内联前每次调用要付反射级开销（实测 Render thread CPU 占用 91%，
+// fps 从 150+ 掉到 5-6 且长期不收敛；是否发作取决于 JIT 编译时机 → 表现为「随机」）。
+// 本 mod 的 `beginTransform` 每帧调用近 4 万次矩阵写入，是典型受害者。
 //
-// 本 mod 的 `beginTransform` 每帧调用近 4 万次矩阵写入（1100 只羊 × 17 部件），
-// 是典型的受害者。`unsafe` 变体移除了 versions/25 覆盖，memPutFloat 直接是
-// `Unsafe.putFloat`（单条 intrinsic），实测冷启动第 2 帧即恢复满速。
-//
-// 这是 LWJGL 官方文档给出的规避方案（doc/FFM.md）：
-// "If an application faces unexpected compatibility or performance issues with the FFM
-//  backend ... add the `unsafe` classifier to the core module dependency to revert back
-//  to the JNI/Unsafe backend."
-configurations.configureEach {
-	resolutionStrategy.eachDependency { details ->
-		if (details.requested.group == 'org.lwjgl' && details.requested.name == 'lwjgl') {
-			details.useTarget "org.lwjgl:lwjgl:${details.requested.version}:unsafe"
-		}
-	}
-}
+// 官方规避方案（doc/FFM.md）：用 `org.lwjgl:lwjgl:<version>:unsafe` classifier
+// 退回 JNI/Unsafe 后端。**但注意**：在 Gradle 层做依赖替换对 Loom 无效
+// （`minecraftClientRuntimeLibraries` 是独立配置，`configurations.configureEach`
+// 的 resolutionStrategy 不生效，已于 2026-09-14 实测确认）。
+// 本机开发请直接替换 Gradle 缓存中的 jar：
+//   ~/.gradle/caches/modules-2/files-2.1/org.lwjgl/lwjgl/3.4.1/<hash>/lwjgl-3.4.1.jar
+//   （备份原文件后，用 lwjgl-3.4.1-unsafe.jar 覆盖）
 
 repositories {
 	mavenCentral()
@@ -139,6 +130,20 @@ tasks.withType(JavaCompile).configureEach {
 	it.options.release = 25
 }
 
+// RenderDoc 抓帧：直接用 Loom 内置的 `runClientRenderDoc`，无需自定义任务。
+//
+// Loom 1.17 自带完整集成（`downloadRenderDoc` / `extractRenderDoc` / `runClientRenderDoc`
+// / `startRenderDocUI`），它会自行下载并解压官方的 renderdoccmd，然后以
+//   renderdoccmd capture --wait-for-exit --working-dir <runDir> //     <javaLauncher> <allJvmArgs> -Dfabric.loom.renderdoc.enabled=true <mainClass>
+// 的方式拉起游戏 JVM —— RenderDoc 是游戏进程的直接父进程。
+//
+// ⚠️ 不要改写成 `renderdoccmd capture ... gradlew runClient`：Gradle daemon 是常驻进程，
+// wrapper 只是把任务转发给它，真正 fork 出游戏 JVM 的是 daemon，结果被 hook 的
+// java.exe 里跑的是 Gradle 逻辑而非游戏，抓不到正确的帧。
+//
+// 用法：`./gradlew runClientRenderDoc` → 进世界站到目标前 → 按 F12 抓帧。
+// 另有 `./gradlew startRenderDocUI` 可单独打开 RenderDoc 界面。
+
 java {
 	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
 	// if it is present.
@@ -189,7 +194,8 @@ sourceSets {
 			exclude 'com/namelessgod2008/features/entities/mixins/InventoryScreenMixin.java'
 			// 未注册的孤儿 mixin（依赖 items/text）
 			exclude 'com/namelessgod2008/core/mixins/compatibility/ParticleEngineMixin.java'
-			exclude 'com/namelessgod2008/compat/iris/**'
+			// 26.1 / Iris 1.11.4：已修复适配（Iris 移除了 batchedentityrendering 包，
+			// 相关 mixin 已按新架构重写；见 compat/iris 的类注释），故不再排除。
 			exclude 'com/namelessgod2008/compat/immediatelyfast/**'
 			exclude 'com/namelessgod2008/compat/tweakeroo/**'
 			exclude 'com/namelessgod2008/compat/xaero/**'

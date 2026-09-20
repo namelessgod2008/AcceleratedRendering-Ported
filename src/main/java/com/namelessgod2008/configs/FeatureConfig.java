@@ -175,8 +175,15 @@ public class FeatureConfig {
 		coreForceTranslucentAcceleration				= builder
 				.comment				("- DISABLED: Translucent RenderType will fallback to vanilla rendering pipeline if the accelerated pipeline does not support translucent sorting unless mods explicitly enable force translucent acceleration temporarily when rendering their own faces.")
 				.comment				("- ENABLED: Translucent RenderType will still be rendered in accelerated pipeline even if the pipeline does not support translucent sorting unless mods explicitly disable force translucent acceleration temporarily when rendering their own faces.")
+				.comment				("")
+				.comment				("26.1 移植注记：本 mod 的加速缓冲源（CoreBuffers.CORE / IrisCompatBuffers）")
+				.comment				("均未启用 supportTranslucent —— 即当前加速管线不支持半透明排序。")
+				.comment				("ENABLED 会强制把半透明几何也送进加速管线，在光影（如 Photon）下表现为：")
+				.comment				("半透明外壳消失、内层显示为不透明（Photon 的 gbuffers_entities_translucent")
+				.comment				("需要向 colortex0 做 alpha 混合，而加速路径拿不到对应程序/目标）。")
+				.comment				("故默认值由 ENABLED 改为 DISABLED —— 让半透明回退原版管线。")
 				.translation			("acceleratedrendering.configuration.core_settings.force_translucent_acceleration")
-				.defineEnum				("force_translucent_acceleration",		FeatureStatus.ENABLED);
+				.defineEnum				("force_translucent_acceleration",		FeatureStatus.DISABLED);
 
 		coreMeshInfoCacheType							= builder
 				.comment				("- SIMPLE: The most basic implementation of cache. Usually used for testing if other cache types are working correctly.")

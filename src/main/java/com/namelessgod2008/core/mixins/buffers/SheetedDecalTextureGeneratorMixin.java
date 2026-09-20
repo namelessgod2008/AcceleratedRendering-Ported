@@ -1,6 +1,7 @@
 package com.namelessgod2008.core.mixins.buffers;
 
 import com.namelessgod2008.core.buffers.accelerated.builders.IAcceleratedVertexConsumer;
+import com.namelessgod2008.core.buffers.accelerated.builders.IAcceleratedWrapperDelegation;
 import com.namelessgod2008.core.buffers.accelerated.builders.VertexConsumerExtension;
 import com.namelessgod2008.core.buffers.accelerated.renderers.IAcceleratedRenderer;
 import com.namelessgod2008.core.buffers.accelerated.renderers.SheetedDecalTextureRenderer;
@@ -16,12 +17,19 @@ import org.spongepowered.asm.mixin.Unique;
 
 @ExtensionMethod(VertexConsumerExtension		.class)
 @Mixin			(SheetedDecalTextureGenerator	.class)
-public class SheetedDecalTextureGeneratorMixin implements IAcceleratedVertexConsumer {
+public class SheetedDecalTextureGeneratorMixin implements IAcceleratedVertexConsumer, IAcceleratedWrapperDelegation {
 
 	@Shadow @Final private VertexConsumer	delegate;
 	@Shadow @Final private Matrix4f			cameraInversePose;
 	@Shadow @Final private Matrix3f			normalInversePose;
 	@Shadow @Final private float			textureScale;
+
+
+	@Unique
+	@Override
+	public VertexConsumer acceleratedDelegate() {
+		return delegate;
+	}
 
 	@Unique
 	@Override

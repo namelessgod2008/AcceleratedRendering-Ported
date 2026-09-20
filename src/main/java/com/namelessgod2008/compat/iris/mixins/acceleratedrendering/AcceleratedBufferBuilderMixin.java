@@ -9,15 +9,10 @@ import com.namelessgod2008.core.buffers.accelerated.layers.functions.ILayerFunct
 import com.namelessgod2008.core.buffers.accelerated.pools.StagingBufferPool;
 import com.namelessgod2008.core.buffers.memory.IMemoryInterface;
 import com.namelessgod2008.core.buffers.memory.VertexLayout;
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
-import com.llamalad7.mixinextras.sugar.ref.LocalRef;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.irisshaders.batchedentityrendering.impl.WrappableRenderType;
 import net.irisshaders.iris.uniforms.CapturedRenderingState;
 import net.irisshaders.iris.vertices.IrisVertexFormats;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -27,6 +22,25 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+/**
+ * 填充 Iris 的实体标识扩展元素 {@code iris_Entity} 与 {@code mc_Entity}。
+ *
+ * <p>「每条实体几何写入路径都要补一份」是本兼容层的既定模式 —— 见
+ * {@code SimpleMeshCollectorMixin}（{@code mc_midTexCoord}）与
+ * {@code MeshUploadingProgramDispatcherMixin}（缓存网格上传）。三处各自覆盖一条路径，
+ * 缺任何一处都会让对应路径的几何在光影下出错。
+ *
+ * <p>本类覆盖：
+ * <ul>
+ *   <li>11 参 {@code addVertex(FFFIFFIIFFF)} —— 直写顶点，{@code ModelPart} 走这条；</li>
+ *   <li>{@code addVertex(FFF)} —— 链式写法的起点；</li>
+ *   <li>{@code addServerMesh} / {@code addClientMesh} —— 缓存网格的整块拷贝路径。</li>
+ * </ul>
+ *
+ * <p>元素偏移经 {@code layout.getElement(...)} 动态取得，不硬编码 ——
+ * Iris 1.11.4 已把 {@code ENTITY_ID_ELEMENT} 从 USHORT×3 改为 USHORT×4。
+ * 无 Iris 时 {@code layout} 查不到这些元素，返回 {@code NullMemoryInterface}（全 no-op）。
+ */
 @Mixin(AcceleratedBufferBuilder.class)
 public class AcceleratedBufferBuilderMixin implements IIrisAcceleratedBufferBuilder {
 
@@ -35,20 +49,6 @@ public class AcceleratedBufferBuilderMixin implements IIrisAcceleratedBufferBuil
 
 	@Unique private			IMemoryInterface	entityIdOffset;
 	@Unique private			IMemoryInterface	entityOffset;
-
-	@WrapOperation(
-		method = "<init>",
-		at = @At(
-			value = "INVOKE",
-			target = "Lcom/namelessgod2008/core/buffers/accelerated/layers/LayerKey;renderType()Lnet/minecraft/client/renderer/RenderType;"
-		)
-	)
-	public RenderType unwrapIrisRenderType(
-		LayerKey 				instance,
-        Operation<RenderType> 	original
-    ) {
-		return (instance.renderType() instanceof WrappableRenderType wrapped) ?  wrapped.unwrap() : instance.renderType();
-	}
 
 	@Inject(
 			method	= "<init>",

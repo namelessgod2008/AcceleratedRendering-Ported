@@ -5,8 +5,12 @@ import com.namelessgod2008.core.CoreBuffers;
 import com.namelessgod2008.core.CoreFeature;
 import com.namelessgod2008.core.CoreStates;
 import com.namelessgod2008.core.buffers.accelerated.layers.LayerDrawType;
+import com.namelessgod2008.core.buffers.accelerated.layers.storage.LayerStorageType;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.framegraph.FrameGraphBuilder;
+import com.mojang.blaze3d.framegraph.FramePass;
 import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.renderer.LevelRenderer;
@@ -81,52 +85,102 @@ public class LevelRendererMixin {
 	}
 
 	/**
-	 * 26.1: 绘制必须在 frame.execute() 【期间】执行，而不是之后。
+	 * 26.1 + Iris: 加速绘制按 OPAQUE / TRANSLUCENT **拆成两个时机**。
 	 *
-	 * 原因：26.1 的纹理是懒加载的（TextureManager.getTexture → 未注册则同步上传）。
-	 * 在 execute() 之后帧图已提交，GPU 无法再完成纹理上传，会抛
-	 * ReportedException("Uploading texture") → 采样器绑定失败 → 绘制异常/画面缺失。
-	 * 原版实体渲染同样发生在 frame pass 内（pass.executes），此处与之对齐：
-	 * 注册一个 FramePass，把加速缓冲的绘制放到该 pass 中。
+	 * <p><b>为什么必须拆</b>（2026-09-20 定位，Iris 1.11.4 字节码实证）：
+	 * Iris 把 {@code beginTranslucents()} 挂钩在 {@code lambda$addMainPass$0} 内
+	 * <b>对 {@code FeatureRenderDispatcher.renderTranslucentFeatures()} 的 INVOKE 上</b>
+	 * （{@code MixinLevelRenderer.iris$beginTranslucents}，无 shift ⇒ 在该调用**之前**执行）。
+	 * 它会把 {@code isBeforeTranslucent} 置为 {@code false}，而该标志决定
+	 * {@code bindDefault()} / {@code ExtendedShader.iris$setupState()} 绑哪个 FBO：
+	 * <pre>
+	 *   true  → 写 gbuffer 主纹理（deferred 会消费）
+	 *   false → 写 alt 纹理（deferred 已跑完，不再被采样）
+	 * </pre>
 	 *
-	 * 注入 addMainPass 的 TAIL：它的第一个参数即 FrameGraphBuilder（作为普通 handler
-	 * 参数即可取得，无需 MixinExtras sugar），此时 main pass 已注册，我们追加的 pass
-	 * 会在其之后执行——正是实体顶点已写入加速缓冲之后。
+	 * <p>{@code lambda$addMainPass$0} 的字节码顺序：
+	 * <pre>
+	 *   273: renderSolidFeatures()        ← isBeforeTranslucent == true  ★ OPAQUE 锚点取这之后
+	 *   278: endBatch()
+	 *   390: renderTranslucentFeatures()  ← Iris 在此之前把标志置 false   ★ TRANSLUCENT 锚点取这之后
+	 *   416: endOutlineBatch()
+	 * </pre>
+	 *
+	 * <p>若不拆，两批都会落在 {@code false} 之后：Photon 的 {@code solid.glsl}
+	 * 是 {@code DRAWBUFFERS:1}（**只写 gbuffer albedo**，deferred 之后不再采样）
+	 * → 不透明实体不可见；而 {@code translucent.glsl} 是 {@code DRAWBUFFERS:01}
+	 * （同时写 scene color，final composite 读得到）→ 半透明可见。
+	 * 这精确对应实测症状「史莱姆有身体无眼睛、羊/箱子消失」。
+	 *
+	 * <p>拆分要求 {@code LayerStorageType.SEPARATED}（{@code SeparatedLayerStorage.get(type)}
+	 * 才能按 drawType 取到独立桶）；配置正是 SEPARATED。
 	 */
-	@Inject(method = "addMainPass", at = @At("TAIL"), require = 0)
-	public void drawCoreBuffers(
-		FrameGraphBuilder					frame,
-		net.minecraft.client.renderer.culling.Frustum			frustum,
-		Matrix4fc							modelViewMatrix,
-		GpuBufferSlice						terrainFog,
-		boolean								renderOutline,
-		net.minecraft.client.renderer.state.level.LevelRenderState	levelRenderState,
-		DeltaTracker						deltaTracker,
-		net.minecraft.util.profiling.ProfilerFiller				profiler,
-		ChunkSectionsToRender				chunkSectionsToRender,
-		CallbackInfo						ci
-	) {
+	@Inject(
+			method	= "lambda$addMainPass$0",
+			at		= @At(
+					value	= "INVOKE",
+					target	= "Lnet/minecraft/client/renderer/feature/FeatureRenderDispatcher;renderSolidFeatures()V",
+					shift	= At.Shift.AFTER
+			)
+	)
+	private void drawAcceleratedOpaque(CallbackInfo ci) {
 		if (!CoreFeature.isLoaded()) {
 			return;
 		}
 
-		var pass = frame.addPass("accelerated_rendering");
-
-		// 注意：readsAndWrites 会把原句柄的内容移入新句柄（writeAndAlias），
-		// 必须写回字段，否则后续 pass（clouds/weather 等）引用的旧句柄会失效并抛
-		// "Handle main#N is no longer valid"。LevelRenderer 自身的 pass 同样是这种写法。
-		this.targets.main = pass.readsAndWrites(this.targets.main);
-		pass.executes(this::renderAcceleratedBuffers);
+		// 此处 isBeforeTranslucent 仍为 true → 几何写进 deferred 会读的 gbuffer 主纹理
+		drawAccelerated(LayerDrawType.OPAQUE);
 	}
 
-	@org.spongepowered.asm.mixin.Shadow
-	private net.minecraft.client.renderer.LevelTargetBundle targets;
+	@Inject(
+			method	= "lambda$addMainPass$0",
+			at		= @At(
+					value	= "INVOKE",
+					target	= "Lnet/minecraft/client/renderer/OutlineBufferSource;endOutlineBatch()V",
+					shift	= At.Shift.AFTER
+			)
+	)
+	private void drawAcceleratedTranslucent(CallbackInfo ci) {
+		if (!CoreFeature.isLoaded()) {
+			return;
+		}
 
-	/** 在 frame pass 内绘制加速缓冲（此时 GPU 活跃，纹理懒加载/绘制均可用） */
-	private void renderAcceleratedBuffers() {
-		long statStart = System.nanoTime();
+		// 此处 isBeforeTranslucent 已为 false → 与半透明语义一致。
+		// 非 SEPARATED 时上半透明时机已用 ALL 画完，这里不能再画一遍。
+		if (CoreFeature.getLayerStorageType() == LayerStorageType.SEPARATED) {
+			drawAccelerated(LayerDrawType.TRANSLUCENT);
+		}
 
-		CoreStates                      .recordBuffers();
+		// outline 缓冲有独立的 OUTLINE_TARGET，与主几何相位无关，放在最后即可
+		CoreStates                        .recordBuffers ();
+		CoreBuffers.POS_TEX_COLOR_OUTLINE .prepareBuffers();
+		CoreStates                        .restoreBuffers();
+		CoreBuffers.POS_TEX_COLOR_OUTLINE .drawBuffers(LayerDrawType.ALL);
+
+		reportFrame();
+	}
+
+	/**
+	 * 绘制指定 drawType 的加速缓冲。
+	 *
+	 * <p>{@code prepareBuffers()} 内部有幂等守卫（{@code prepared} 标志），
+	 * 故两个时机各调一次不会重复上传/变换 —— 第一次负责上传并投桶，第二次直接返回。
+	 * {@code clearBuffers()} 同理只在后一次真正生效。
+	 */
+	private void drawAccelerated(LayerDrawType drawType) {
+		// 只有 SEPARATED 存储才能按 drawType 取到独立桶；其余（如 SORTED）对任何
+		// LayerDrawType 都返回同一集合，拆分会把同一批 drawContext 画两遍。
+		// 非 SEPARATED 时退化为一次全量绘制（放在不透明时机，与拆分前的行为一致）。
+		if (CoreFeature.getLayerStorageType() != LayerStorageType.SEPARATED) {
+			drawType = LayerDrawType.ALL;
+		}
+
+		if (drawType == LayerDrawType.OPAQUE || drawType == LayerDrawType.ALL) {
+			// 帧计时起点：从第一次绘制开始，到半透明 + outline 收尾为止
+			frameStartNanos = System.nanoTime();
+		}
+
+		CoreStates                      .recordBuffers ();
 		CoreBuffers.ENTITY              .prepareBuffers();
 		CoreBuffers.BLOCK               .prepareBuffers();
 		CoreBuffers.POS                 .prepareBuffers();
@@ -136,14 +190,20 @@ public class LevelRendererMixin {
 		CoreBuffers.POS_COLOR_TEX_LIGHT .prepareBuffers();
 		CoreStates                      .restoreBuffers();
 
-		CoreBuffers.ENTITY              .drawBuffers(LayerDrawType.ALL);
-		CoreBuffers.BLOCK               .drawBuffers(LayerDrawType.ALL);
-		CoreBuffers.POS                 .drawBuffers(LayerDrawType.ALL);
-		CoreBuffers.POS_COLOR           .drawBuffers(LayerDrawType.ALL);
-		CoreBuffers.POS_TEX             .drawBuffers(LayerDrawType.ALL);
-		CoreBuffers.POS_TEX_COLOR       .drawBuffers(LayerDrawType.ALL);
-		CoreBuffers.POS_COLOR_TEX_LIGHT .drawBuffers(LayerDrawType.ALL);
+		CoreBuffers.ENTITY              .drawBuffers(drawType);
+		CoreBuffers.BLOCK               .drawBuffers(drawType);
+		CoreBuffers.POS                 .drawBuffers(drawType);
+		CoreBuffers.POS_COLOR           .drawBuffers(drawType);
+		CoreBuffers.POS_TEX             .drawBuffers(drawType);
+		CoreBuffers.POS_TEX_COLOR       .drawBuffers(drawType);
+		CoreBuffers.POS_COLOR_TEX_LIGHT .drawBuffers(drawType);
+	}
 
+	/** 帧计时起点，供 {@link #reportFrame()} 统计整帧加速开销 */
+	private long frameStartNanos;
+
+	/** 收尾：清空缓冲并上报统计（只在最后一个绘制时机调用一次） */
+	private void reportFrame() {
 		CoreBuffers.ENTITY              .clearBuffers();
 		CoreBuffers.BLOCK               .clearBuffers();
 		CoreBuffers.POS                 .clearBuffers();
@@ -151,16 +211,10 @@ public class LevelRendererMixin {
 		CoreBuffers.POS_TEX             .clearBuffers();
 		CoreBuffers.POS_TEX_COLOR       .clearBuffers();
 		CoreBuffers.POS_COLOR_TEX_LIGHT .clearBuffers();
-
-		// 26.1: outline 缓冲同样在此绘制
-		CoreStates                        .recordBuffers();
-		CoreBuffers.POS_TEX_COLOR_OUTLINE .prepareBuffers();
-		CoreStates                        .restoreBuffers();
-		CoreBuffers.POS_TEX_COLOR_OUTLINE .drawBuffers(LayerDrawType.ALL);
-		CoreBuffers.POS_TEX_COLOR_OUTLINE .clearBuffers();
+		CoreBuffers.POS_TEX_COLOR_OUTLINE.clearBuffers();
 
 		AccelStats.FRAMES		++;
-		AccelStats.TOTAL_NANOS	+= System.nanoTime() - statStart;
+		AccelStats.TOTAL_NANOS	+= System.nanoTime() - frameStartNanos;
 		AccelStats.report();
 	}
 }

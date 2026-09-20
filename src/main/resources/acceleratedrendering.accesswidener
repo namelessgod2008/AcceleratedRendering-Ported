@@ -26,3 +26,7 @@ accessible field com/mojang/blaze3d/opengl/GlRenderPass indexBuffer Lcom/mojang/
 accessible field com/mojang/blaze3d/opengl/GlRenderPass indexType Lcom/mojang/blaze3d/vertex/VertexFormat$IndexType;
 accessible field com/mojang/blaze3d/systems/RenderPass backend Lcom/mojang/blaze3d/systems/RenderPassBackend;
 accessible field com/mojang/blaze3d/opengl/GlBuffer handle I
+
+# 注意：AW 只能作用于 Loom 处理的类（Minecraft jar），无法打宽外部 mod 的类
+# （如 Iris 的 OuterWrappedRenderType）——实测 validateAccessWidener 会报 "Could not find class"。
+# mod 类的私有成员访问请用反射，见 compat/iris 下的实现。

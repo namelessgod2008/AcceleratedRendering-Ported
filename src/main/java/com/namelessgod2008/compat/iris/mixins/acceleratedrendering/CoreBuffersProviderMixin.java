@@ -3,13 +3,10 @@ package com.namelessgod2008.compat.iris.mixins.acceleratedrendering;
 import com.namelessgod2008.compat.iris.IrisCompatBuffers;
 import com.namelessgod2008.core.CoreBuffersProvider;
 import com.namelessgod2008.core.buffers.AcceleratedBufferSources;
-import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import net.irisshaders.batchedentityrendering.impl.RenderBuffersExt;
 import net.irisshaders.iris.pathways.HandRenderer;
 import net.irisshaders.iris.shadows.ShadowRenderingState;
-import net.minecraft.client.renderer.RenderBuffers;
 import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -37,16 +34,10 @@ public class CoreBuffersProviderMixin {
 		return original.call();
 	}
 
-	@WrapMethod(method = "bindAcceleratedBufferSources")
-	private static void bindAcceleratedBufferSourcesForIris(RenderBuffers renderBuffers, Operation<Void> original) {
-		var extension = (RenderBuffersExt) renderBuffers;
-
-		extension.beginLevelRendering();
-
-		original.call(renderBuffers);
-
-		extension.endLevelRendering();
-
-		original.call(renderBuffers);
-	}
+	// 原 1.21.4 在此包装 bindAcceleratedBufferSources，用 Iris 的 RenderBuffersExt
+	// 在绑定期间临时进入「关卡渲染」状态（beginLevelRendering/endLevelRendering）。
+	// Iris 1.11.4 已移除 net.irisshaders.batchedentityrendering 包（含 RenderBuffersExt），
+	// 该状态改由 Iris 自己在 net.irisshaders.iris.mixin.MixinLevelRenderer 中调用
+	// WorldRenderingPipeline.beginLevelRendering() / finalizeLevelRendering() 维护，
+	// 故此处不再需要额外包装。
 }

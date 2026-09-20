@@ -33,6 +33,8 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 
 	private					AcceleratedRingBuffers.Buffers			currentBuffer;
 	private 				boolean									used;
+	/** prepareBuffers 的幂等守卫（光影下绘制分两个时机，会调用两次） */
+	private 				boolean									prepared;
 	private					int										barriers;
 
 	public AcceleratedBufferSource(IBufferEnvironment bufferEnvironment) {
@@ -125,9 +127,14 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 	}
 
 	public void prepareBuffers() {
-		if (!used) {
+		if (!used || prepared) {
 			return;
 		}
+
+		// 光影下绘制被拆成两个时机（不透明 / 半透明，见 LevelRendererMixin），
+		// prepareBuffers 会被调用两次。上传+变换只需做一次，否则同一批 builder
+		// 会被重复 dispatch、drawContext 也会被重复投进 OPAQUE 桶导致重绘。
+		prepared = true;
 
 		AccelStats.PREPARE_CALLS ++;
 
@@ -275,6 +282,18 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 									java.util.OptionalDouble.empty()
 							)
 					) {
+						// 光影下把输出重定向到 Iris 的 gbuffer。
+						//
+						// createRenderPass 用传入纹理（= 主渲染目标）建并绑 FBO，绕过了 Iris
+						// 的重定向；而 GlRenderPass 内部不持有 FBO 字段、存活期不再重绑，
+						// 故此处重新绑定即对后续 drawIndexed 生效。
+						// 未装光影时 redirector 为 null（或返回 false），不做任何事。
+						var redirector = com.namelessgod2008.core.backends.GbufferBridge.get();
+
+						if (redirector != null) {
+							redirector.redirectToGbuffer();
+						}
+
 						com.mojang.blaze3d.systems.RenderSystem.bindDefaultUniforms(pass);
 
 						for (var drawContext : entry.getValue()) {
@@ -307,6 +326,7 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 		}
 
 		used			= false;
+		prepared		= false;
 		currentBuffer	= ringBuffers.get(false);
 
 		environment		.clear	();

@@ -1,6 +1,7 @@
 package com.namelessgod2008.core.mixins.buffers;
 
 import com.namelessgod2008.core.buffers.accelerated.builders.IAcceleratedVertexConsumer;
+import com.namelessgod2008.core.buffers.accelerated.builders.IAcceleratedWrapperDelegation;
 import com.namelessgod2008.core.buffers.accelerated.builders.VertexConsumerExtension;
 import com.namelessgod2008.core.buffers.accelerated.renderers.IAcceleratedRenderer;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -17,9 +18,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @ExtensionMethod(VertexConsumerExtension.class)
 @Mixin			(targets = "com.mojang.blaze3d.vertex.VertexMultiConsumer$Multiple")
-public class VertexMultipleConsumerMixin implements IAcceleratedVertexConsumer {
+public class VertexMultipleConsumerMixin implements IAcceleratedVertexConsumer, IAcceleratedWrapperDelegation {
 
 	@Shadow @Final private	VertexConsumer[]	delegates;
+
+
+	@Unique
+	@Override
+	public VertexConsumer acceleratedDelegate() {
+		return delegates[0];
+	}
 
 	@Unique private			boolean				accelerated = true;
 

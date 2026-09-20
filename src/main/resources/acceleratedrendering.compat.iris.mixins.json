@@ -10,19 +10,18 @@
     "acceleratedrendering.AcceleratedBufferSourceMixin",
     "acceleratedrendering.AcceleratedRenderingModEntryMixin",
     "acceleratedrendering.CoreBuffersProviderMixin",
+    "acceleratedrendering.CulledMeshCollectorMixin",
     "acceleratedrendering.IBufferEnvironmentPresetsMixin",
     "acceleratedrendering.MeshUploaderMixin",
     "acceleratedrendering.MeshUploadingProgramDispatcherMixin",
     "acceleratedrendering.RenderTypeUtilsMixin",
+    "acceleratedrendering.SimpleMeshCollectorMixin",
     "acceleratedrendering.SimpleMeshInfoCacheMixin",
     "acceleratedrendering.UnsafeMemoryMeshInfoCacheMixin",
     "iris.BufferSourceWrapperMixin",
-    "iris.FullyBufferedMultiBufferSourceMixin",
     "iris.HandRendererMixin",
-    "iris.IrisVertexFormatsMixin",
     "iris.ModelToEntityVertexSerializerMixin",
-    "iris.ShadowRendererMixin",
-    "vanilla.LevelRendererMixin"
+    "iris.ShadowRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -50,7 +50,7 @@ public class IBufferEnvironmentPresetsMixin {
 	private static void useIrisEntityEnvironment(IBufferEnvironment value, Operation<Void> original) {
 		original.call(new IrisBufferEnvironment(
 				value,
-				DefaultVertexFormat	.NEW_ENTITY,
+				DefaultVertexFormat	.ENTITY,
 				IrisVertexFormats	.ENTITY,
 				IrisPrograms		.IRIS_ENTITY_MESH_UPLOADING_KEY,
 				IrisPrograms		.IRIS_ENTITY_VERTEX_TRANSFORM_KEY

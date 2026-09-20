@@ -2,6 +2,7 @@ package com.namelessgod2008.core.mixins.buffers;
 
 import com.namelessgod2008.core.buffers.accelerated.builders.AcceleratedSpriteCoordinateExpander;
 import com.namelessgod2008.core.buffers.accelerated.builders.IAcceleratedVertexConsumer;
+import com.namelessgod2008.core.buffers.accelerated.builders.IAcceleratedWrapperDelegation;
 import com.namelessgod2008.core.buffers.accelerated.builders.VertexConsumerExtension;
 import com.namelessgod2008.core.buffers.accelerated.renderers.DecoratedRenderer;
 import com.namelessgod2008.core.buffers.accelerated.renderers.IAcceleratedRenderer;
@@ -18,10 +19,17 @@ import org.spongepowered.asm.mixin.Unique;
 
 @ExtensionMethod(VertexConsumerExtension	.class)
 @Mixin			(SpriteCoordinateExpander	.class)
-public class SpriteCoordinateExpanderMixin implements IAcceleratedVertexConsumer {
+public class SpriteCoordinateExpanderMixin implements IAcceleratedVertexConsumer, IAcceleratedWrapperDelegation {
 
 	@Shadow @Final private VertexConsumer		delegate;
 	@Shadow @Final private TextureAtlasSprite	sprite;
+
+
+	@Unique
+	@Override
+	public VertexConsumer acceleratedDelegate() {
+		return delegate;
+	}
 
 	@Unique
 	@Override

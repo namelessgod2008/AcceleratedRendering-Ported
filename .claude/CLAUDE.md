@@ -9,6 +9,13 @@
 ## 项目区
 
 - mixin操作优先使用mixinextras的，除非用户明确说明，否则禁止使用redirect
+- **mod 兼容代码一律放入 `com/namelessgod2008/compat/<mod名>/`**，不要散落在 `core`/`features` 里。
+  每个 compat 模块配套自己的 `<mod名>.mixins.json`（含 `plugin` 做存在性判定），并在 `fabric.mod.json` 注册。
+- **禁止使用 mixin accessor（`@Accessor`/`@Invoker`），统一用 access widener。**
+  AW 条目写在 `src/main/resources/acceleratedrendering.accesswidener`。
+  理由：AW 是编译期声明、可被 `validateAccessWidener` 校验，且在 IDE 中直接可见；
+  accessor 需要额外 mixin 类与注册，且目标类缺失时失败方式更隐蔽。
+  （注：`@Invoker` 用于调用私有方法时 AW 无等价物，确需调用私有方法时优先考虑换公开入口。）
 
 ## 1. 先思考再编码
 

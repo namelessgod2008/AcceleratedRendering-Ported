@@ -2,6 +2,7 @@ package com.namelessgod2008.core.mixins.buffers;
 
 import com.namelessgod2008.core.buffers.accelerated.builders.AcceleratedEntityOutlineGenerator;
 import com.namelessgod2008.core.buffers.accelerated.builders.IAcceleratedVertexConsumer;
+import com.namelessgod2008.core.buffers.accelerated.builders.IAcceleratedWrapperDelegation;
 import com.namelessgod2008.core.buffers.accelerated.builders.VertexConsumerExtension;
 import com.namelessgod2008.core.buffers.accelerated.renderers.DecoratedRenderer;
 import com.namelessgod2008.core.buffers.accelerated.renderers.IAcceleratedRenderer;
@@ -17,10 +18,17 @@ import org.spongepowered.asm.mixin.Unique;
 
 @ExtensionMethod(VertexConsumerExtension					.class)
 @Mixin			(OutlineBufferSource.EntityOutlineGenerator	.class)
-public class EntityOutlineGeneratorMixin implements IAcceleratedVertexConsumer {
+public class EntityOutlineGeneratorMixin implements IAcceleratedVertexConsumer, IAcceleratedWrapperDelegation {
 
 	@Shadow @Final private VertexConsumer   delegate;
 	@Shadow @Final private int              color;
+
+
+	@Unique
+	@Override
+	public VertexConsumer acceleratedDelegate() {
+		return delegate;
+	}
 
 	@Unique
 	@Override

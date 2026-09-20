@@ -33,6 +33,24 @@ import java.util.OptionalInt;
  * ⚠️ 26.1 的 CommandEncoder 规定：存在打开的 render pass 时不得执行其它命令。而解析纹理
  * （可能触发懒加载上传 writeToTexture）与写入 DynamicTransforms（mapBuffer）都属于此类命令，
  * 必须在【开 pass 之前】完成（原版 RenderType.draw 亦如此）。故拆为 prepareDraw() / drawElements()。
+ *
+ * <p><b>⚠️ Iris 兼容：本类是光影下实体不可见问题（2026-09-16 起排查）的核心现场。</b>
+ * Iris 用 {@code MixinGlCommandEncoder} 深度介入 {@code createRenderPass / trySetup /
+ * finishRenderPass} 三个环节，实测到的字节码行为：
+ * <ul>
+ *   <li>{@code changeFramebuffer(int,int)}：当 {@code ShadowRenderingState.areShadowsCurrentlyBeingRendered()}
+ *       或 {@code ImmediateState.safeToMultiply} 为真时，**不调用** {@code _glBindFramebuffer}，
+ *       只把 FBO 存进 {@code tempFBO} 字段（推迟绑定）；否则正常绑定。
+ *       （注：{@code safeToMultiply} 全库仅 2 处引用且无写入点，恒为 false；{@code ACTIVE}
+ *       只在 {@code ShadowRenderer.renderShadows()} 内为 true —— 故主通道下二者皆假，FBO 正常绑定。）</li>
+ *   <li>{@code iris$setupState(GlRenderPass, ...)}：**仅当** {@code pass.pipeline.program()}
+ *       是 {@code IrisProgram} 时才执行 Iris 侧状态设置（硬编码取 {@code samplers.get("Sampler0")}
+ *       注册 albedo、调 {@code iris$setupState(samplers, albedoView)} 上传 Iris 专有 uniform）。
+ *       若 program 不是 {@code IrisProgram}，这整段被跳过。</li>
+ *   <li>{@code iris$bypassSetup}：先 {@code DepthColorStorage.unlockDepthColor()}（解除
+ *       {@code _depthMask(false)+_colorMask(0)} 的全局锁），再看 {@code safeToMultiply}。</li>
+ * </ul>
+ * 排查结论详见 memory/iris-shader-entity-invisible.md（已排除 11 个假设）。
  */
 public class BaseVertexDrawContextPool extends SimpleResetPool<BaseVertexDrawContextPool.DrawContext, Void> implements IDrawContextPool {
 

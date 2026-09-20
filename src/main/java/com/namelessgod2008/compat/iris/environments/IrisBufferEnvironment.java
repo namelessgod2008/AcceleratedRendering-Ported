@@ -159,7 +159,8 @@ public class IrisBufferEnvironment implements IBufferEnvironment {
 
 		@Override
 		public void setupBufferState() {
-			irisVertexFormat.setupBufferState();
+			// 26.1: 顶点属性绑定由 RenderPass/pipeline 自动处理，不再需要手动 setup
+			// （VertexFormat.setupBufferState 已随 ShaderInstance 一并移除）
 		}
 
 		@Override

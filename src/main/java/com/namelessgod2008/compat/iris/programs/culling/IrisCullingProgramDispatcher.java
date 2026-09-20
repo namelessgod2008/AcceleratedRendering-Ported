@@ -1,5 +1,6 @@
 package com.namelessgod2008.compat.iris.programs.culling;
 
+import com.namelessgod2008.core.CoreFeature;
 import com.namelessgod2008.compat.iris.IrisCompatFeature;
 import com.namelessgod2008.core.backends.programs.ComputeProgram;
 import com.namelessgod2008.core.backends.programs.Uniform;
@@ -43,7 +44,7 @@ public class IrisCullingProgramDispatcher implements ICullingProgramDispatcher {
 		var polygonCount	= vertexCount / mode	.primitiveLength;
 
 		viewMatrixUniform	.uploadMatrix4f		(shadowState ? ShadowRenderer.MODELVIEW		: RenderSystem.getModelViewMatrix	());
-		projectMatrixUniform.uploadMatrix4f		(shadowState ? ShadowRenderer.PROJECTION	: RenderSystem.getProjectionMatrix	());
+		projectMatrixUniform.uploadMatrix4f		(shadowState ? ShadowRenderer.PROJECTION	: CoreFeature.getProjectionMatrix	());
 
 		polygonCountUniform	.uploadUnsignedInt	(polygonCount);
 		vertexOffsetUniform	.uploadUnsignedInt	((int) (builder.getVertexCountOffset	()));
