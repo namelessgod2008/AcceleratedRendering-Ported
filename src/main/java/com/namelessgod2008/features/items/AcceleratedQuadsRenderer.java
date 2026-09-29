@@ -59,6 +59,11 @@ public class AcceleratedQuadsRenderer implements IAcceleratedRenderer<Accelerate
 			int				overlay,
 			int				color
 	) {
+		// [AR-PROBE-ITEM2] render 入口 —— 确认 AcceleratedQuadsRenderer 是否真被调用
+		com.namelessgod2008.core.AccelStats.itemProbe("RENDER-IN",
+				"quads=" + (context == null ? "nullCtx" : String.valueOf(context.quads().size()))
+				+ " vc=" + vertexConsumer.getClass().getSimpleName());
+
 		var extension = vertexConsumer.getAccelerated();
 
 		extension.beginTransform(transform, normal);
@@ -84,6 +89,9 @@ public class AcceleratedQuadsRenderer implements IAcceleratedRenderer<Accelerate
 		var byBuilder	= meshes.computeIfAbsent(quad, ignored -> new Reference2ObjectOpenHashMap<>());
 		var mesh		= byBuilder.get(extension);
 		var color		= colors.getColor(quad.materialInfo().tintIndex());
+
+		// [AR-PROBE-ITEM2] 记录 renderQuad 的实际执行与缓存命中
+		com.namelessgod2008.core.AccelStats.itemProbe2(mesh != null);
 
 		if (mesh != null) {
 			mesh.write(extension, color, light, overlay);

@@ -1,0 +1,204 @@
+======================================================================
+AREA: 任务6：加速路径缺少 per-quad 排序的修复策略可行性与代价评估
+  [proven] 加速路径的 drawContext 排序键只比较 sortOnUpload 布尔值，同 RenderType 恒返回 0（等于没有排序）
+     证据: D:/Programs/MC/26.1/AcceleratedRendering-Ported/src/main/java/com/namelessgod2008/core/buffers/accelerated/draw/basevertex/BaseVertexDrawContextPool.java:299 `return Boolean.compare(this.getRenderType().sortOnUpload(), that.getRenderType().sortOnUpload());`；IndirectDrawContextPool.java:283 逐字相同
+  [proven] 唯一的排序入口 SortedLayerContexts.prepare() 走的就是上面那个恒 0 的比较器；默认配置 SEPARATED 下连这个排序都不执行（SimpleLayerContexts.prepare() 为空）
+     证据: core/buffers/accelerated/layers/storage/sorted/SortedLayerContexts.java `contexts.sort(Comparator.naturalOrder())`；SimpleLayerContexts.java prepare() 空体；FeatureConfig.java:200 默认 LayerStorageType.SEPARATED
+  [proven] vanilla 对半透明做两层排序：per-entity（renderTranslucent 按 -|posePos|² 排序）+ per-quad（endBatch 在 sortOnUpload 时 MeshData.sortQuads）
+     证据: javap ModelFeatureRenderer 私有方法 lambda$renderTranslucent$0：`TranslucentModelSubmit.position().lengthSquared()` 后 `fneg`，renderTranslucent 中 `List.sort(Comparator.comparingDouble(...))`；javap MultiBufferSource$BufferSource 偏移 158 sortOnUpload → 170-172 `RenderSystem.getProjectionType().vertexSorting()` → `MeshData.sortQuads(ByteBufferBuilder,VertexSorting)`（分析产物 D:/Programs/MC/26.1/_analysis/mc）
+  [proven] vanilla 的 solid/translucent 分流依据是 RenderType.hasBlending()（等价于 sortOnUpload），与加速路径的 getDrawType 判断一致，分流本身无分歧
+     证据: javap ModelFeatureRenderer$Storage.add 偏移 0-32：`RenderType.hasBlending()` ifne → translucentModelSubmits，否则进 solidModelSubmits（HashMap<RenderType,List>）；core/utils/RenderTypeUtils.java:338-343 getDrawType/isTranslucent 用 sortOnUpload
+  [proven] supportTranslucent 从未被任何地方启用（本仓库与上游 reFabricated 均只有声明、默认 false、builder 方法，无调用点）→ 上游本就不支持半透明加速
+     证据: 全库 grep supportTranslucent 仅命中 core/buffers/AcceleratedBufferSources.java 的字段/构造/默认值/builder；D:/Programs/MC/1.21.4/AcceleratedRendering-reFabricated/.../AcceleratedBufferSources.java 同样只有 :97 的 builder 方法与默认 false
+  [proven] 方案 A 所需的全部输入已经齐备：culling 的 compute shader 已按 quad 读取 4 个顶点、已上传 viewMatrix/projectMatrix，且 INDIRECT 路径已用 atomic counter 在 GPU 侧生成索引缓冲
+     证据: features/culling/OrientationCullingProgramDispatcher.java:41-42 上传 viewMatrix/projectMatrix；shaders/core/culling/entity_quad_culling_shader.compute 读 vertices[index1..index4] 并算 `mat4 matrix = projectMatrix * viewMatrix` 与行列式；同文件 `layout(binding=0, offset=0) uniform atomic_uint indexCounter` + `atomicCounterAdd(indexCounter, 6u)` 写 PolygonsOut(binding=6)
+  [proven] BASEVERTEX 路径的索引缓冲是全局共享的规范前缀（QUADS 每 4 顶点 6 索引，所有 draw 从偏移 0 读自身 count），结构上无法按 quad 重排
+     证据: core/buffers/accelerated/draw/basevertex/BaseVertexElementPool.java 类注释「所有 draw 都从索引偏移 0 读取自身 count 个索引，配合 drawIndexed 的 baseVertex」+ ensureIndices 只做单调前缀物化；BaseVertexDrawContextPool.drawElements 用 `drawIndexed(baseVertex,0,count,1)`
+  [proven] 顶点数据以「共享 mesh 缓存 + 每实例 sharing 变换矩阵」组织，同一模型的所有实例共用一份 mesh 顶点；深度只有在 GPU 变换后才能得知
+     证据: core/programs/dispatchers/meshes/MeshUploadingProgramDispatcher.java（MeshInfo/MeshUploader 把 mesh 顶点用 sparse/dense compute 上传，sharing 矩阵写在 SHARING_TRANSFORM）；core/meshes/data/cache/SimpleMeshDataCache.java:27-43 以 (layout, MeshData) 为键缓存 mesh；shaders/core/transform/entity_vertex_transform_shader.compute 才做 `transformMatrix * vertex`
+  [proven] RenderPass 没有覆盖 depth-write 的入口；深度状态来自 pipeline，且由 GlCommandEncoder.applyPipelineState 在绘制时按 pipeline 变化重写（lastPipeline 相同时提前 return）
+     证据: javap com/mojang/blaze3d/systems/RenderPass 仅 setPipeline/bindTexture/setUniform/enableScissor/setVertexBuffer/setIndexBuffer/drawIndexed/draw；GlCommandEncoder.applyPipelineState 字节码 1644 读 lastPipeline、1647-1650 比较后写回、1660-1663 `DepthStencilState.writeDepth()` → `GlStateManager._depthMask(Z)`；其唯一调用点在 trySetup（executeDraw 内，偏移 596）
+  [proven] ENTITY_TRANSLUCENT pipeline = ENTITY_SNIPPET + BlendFunction.TRANSLUCENT + withCull(false)；ENTITY_SNIPPET 深度状态为 DepthStencilState.DEFAULT（LEQUAL + writeDepth=true），即半透明几何确实写深度
+     证据: javap RenderPipelines：偏移 380-318 ENTITY_SNIPPET `withDepthStencilState(DepthStencilState.DEFAULT)`；偏移 1856-1903 ENTITY_TRANSLUCENT 由 ENTITY_SNIPPET 构建 + `new ColorTargetState(BlendFunction.TRANSLUCENT)` + `withCull(false)`
+  [proven] 若要在加速路径改用「不写深度」的 pipeline，克隆路径存在：RenderPipeline.builder() 与 Builder 的全部 with* 都是 public；但 RenderType.create(String,RenderSetup) 非 public，需要 AW/AT 打开
+     证据: javap com/mojang/blaze3d/pipeline/RenderPipeline$Builder 全部 with* 为 public；javap RenderType 的 `static net.minecraft.client.renderer.rendertype.RenderType create(java.lang.String,RenderSetup)` 无 public 修饰符；RenderSetup.builder(pipeline) 为 public
+  [likely] 受 force/白名单影响的「entity 格式 + sortOnUpload」类型只有 3 个，且使用者是可枚举的少数：史莱姆外壳、玩家、盔甲架、经验球、马纹、潜影贝子弹、头颅、监守者（羊/方块实体等主力不受影响）
+     证据: javap RenderTypes lambda$static$9/12/13 分别对应 entity_translucent_cull_item_target / entity_translucent / entity_translucent_emissive（均含 sortOnUpload 调用）；`rg -a -l entityTranslucent` 的类清单 = ArmorStandRenderer, AvatarRenderer, ExperienceOrbRenderer, HorseMarkingLayer, LivingEntityRenderer, Sheets, ShulkerBulletRenderer, SkullBlockRenderer, SlimeOuterLayer, WardenRenderer（分析产物 D:/Programs/MC/26.1/_analysis/mc）
+  [proven] 史莱姆几何构成已确认：外层 = order(1) + entityTranslucent + 单立方体（cull=false）；内层 body 与眼睛 = order(0) + entity_cutout（EntityModel 默认渲染函数）
+     证据: SlimeOuterLayer.submit 字节码 `SubmitNodeCollector.order(1)` + `RenderTypes.entityTranslucent(SLIME_LOCATION)`；SlimeModel.createInnerBodyLayer 含 root cube + right_eye/left_eye/mouth + inner cube；EntityModel 构造器 BootstrapMethods → `REF_invokeStatic RenderTypes.entityCutout`；SlimeRenderer.<init> 仅 `addLayer(new SlimeOuterLayer(...))`
+  [speculative] 「缺少 per-quad 排序」这一前提与症状的对应关系存在疑点：外层是单凸立方体、且外壳(order 1)在加速路径的 TRANSLUCENT 阶段绘制本就在内层(order 0)的 OPAQUE 阶段之后，相对顺序与 vanilla 一致；缺排序只能解释外壳自身的 alpha 合成顺序异常，难以解释「内部不透明」「眼睛全黑」
+     证据: 凸体 + LEQUAL/writeDepth 下顶点顺序不改变最终像素归属（只改变混合权重）；LevelRendererMixin.drawAcceleratedOpaque 锚在 renderSolidFeatures 之后、drawAcceleratedTranslucent 在 endOutlineBatch 之后，仍是「先不透明后半透明」；FeatureRenderDispatcherMixin 把 order 桶映射为升序 layer
+  [proven] 「无光影也异常」是用户实测的硬事实，因此本问题与 Iris/gbuffer/MRT 无关（该结论直接排除方案 F 对本症状的价值）
+     证据: 任务背景给定的用户实测；另 memory/iris-shader-entity-invisible.md 中「createRenderPass 不支持 MRT」属光影专属的另一条问题线
+  ◆ A. GPU 侧 per-quad 深度排序
+    做法: 在现有 culling 管线里加排序：1) 扩展 entity/pass-through culling shader，用已上传的 viewMatrix 算 quad 质心视图空间深度 key（同时可写进现有 VaryingData 或独立 key buffer）；2) 新增 3-4 个 compute：256 桶直方图 → 前缀和 → scatter（radix），索引缓冲 ping-pong；3) 在 AcceleratedBufferSource.prepareBuffers 内仅对 TRANSLUCENT 桶追加这些 dispatch + SSBO barrier；4) 必须切换到 DrawMethodType.INDIRECT，因为 BASEVERTEX 的索引是共享规范前缀、无法按 quad 重排。
+    可行性: 中。所需数据（顶点 SSBO、viewMatrix uniform、atomic counter、PolygonsOut 索引 scatter）与整套 dispatch/override 基础设施已存在，见 features/culling/OrientationCullingProgramDispatcher.java:41 与 shaders/core/culling/entity_quad_culling_shader.compute。但需新写 4 个 compute shader、新增 key/index ping-pong 缓冲、并把 BASEVERTEX 换成 INDIRECT（当前配置正是 BASEVERTEX，FeatureConfig.java:159）。
+    风险: 高。① 放弃 BASEVERTEX 的跨帧索引缓存优化（说明书明说 INDIRECT 在 draw call 多时更慢）；② 每帧为每个 translucent builder 额外 4-12 次 dispatch，对「1100 只羊」这类几何量大的场景可能吃掉收益；③ 排序只能局限在单个 builder 的连续顶点范围内，跨 builder 无法统一排序；④ 需要真正的全局 radix/bitonic 实现（单 workgroup 只够 ~1-2k quad，而一个 layer+RenderType 桶含全部实体的 quad）。
+  ◆ B. 半透明几何不写深度
+    做法: 必须绕过 GlCommandEncoder.applyPipelineState（它会按 pipeline 重写 _depthMask）。两条可行实现：(i) mixin GlCommandEncoder.applyPipelineState（或 mixinextras @ModifyExpressionValue 作用于 DepthStencilState.writeDepth() 调用点），对 sortOnUpload 的 RenderType 强制返回 false；(ii) 用 RenderPipeline.builder() 克隆一份 writeDepth=false 的 ENTITY_TRANSLUCENT（Builder 全 public），配 RenderSetup.builder(cloned).withTexture(...).useLightmap().useOverlay().affectsCrumbling().sortOnUpload() 建新 RenderType，需先用 AW 打开 RenderType.create。在 pass 内直接调 GlStateManager._depthMask(false) 不可靠。
+    可行性: 中。API 上可行（Builder 全 public，AW 条目可加），但无法局部生效——深度状态由 pipeline 决定且被 encoder 重写，必须动 26.1 的状态机。
+    风险: 中高。① 与 vanilla 语义不一致：vanilla 靠 per-quad 排序 + 写深度保证正确，去掉写深度后「后画的近处几何」不再自动胜出，多实体重叠的半透明混合仍会错，只是从「硬遮挡」变成「顺序混合」；② 对单模型自重叠（史莱姆外壳）恰好有效；③ 但本症状中的「内部显示为不透明」「眼睛全黑」与深度无关，B 未必能修好全部现象；④ 需要在 encoder 层做全局改动，影响所有走该 RenderType 的绘制（含 Iris 路径）。
+  ◆ C. 保证提交顺序 = 排序后的顺序（CPU 侧排序）
+    做法: C'（per-entity，低成本）：给 IDrawContext 增加一个「相机距离」次级排序键并扩展 compareTo，配合 SortedLayerStorage（或给 SeparatedLayerStorage 的 TRANSLUCENT 桶换成 SortedLayerContexts），让同 (layer,RenderType) 内的 drawContext 按距离绘制。C（per-quad，高成本）：在提交阶段就按距离写 quad —— 需放弃共享 mesh + sharing 矩阵架构，改为每个 quad 独立实例，且 BASEVERTEX 索引无法重排、INDIRECT 索引由 GPU 生成，等价于重写整个上传/绘制链路。
+    可行性: C' 高（排序框架已存在，改动集中在 compareTo 与层级语义）；C(per-quad) 极低——CPU 在提交时拿不到变换后的顶点位置，且顶点按提交序写入 ring buffer，无法事后重排。
+    风险: C' 中：layer 目前承载「盔甲/纹饰/渲染层顺序」（FeatureRenderDispatcherMixin 把 order 桶映射为 layer），把深度塞进同一个键会破坏该层级顺序，必须引入独立次级键（SortedLayerContexts + 稳定排序）。C 的 per-quad 会摧毁 mesh 合并与 dense upload（当前性能收益的来源）。
+  ◆ D. 只加速「不需要排序」的半透明类型（白名单）
+    做法: 保持 supportTranslucent=false 不动，在 AcceleratedBufferSources.getBuffer 的门控里加一个「按 RenderType 白名单放行」集合，只收几何天然无自重叠或单/少数 quad 的类型（候选：entity_translucent_emissive、end_crystal_beam、beacon_beam、entity_shadow）。可按 RenderType 实例或 name() 做 Set 判定。
+    可行性: 高。改动最小（无新 shader、无状态机改动），只影响 AcceleratedBufferSources.java:39-50 的条件。
+    风险: 低，但对本次症状零帮助：白名单里没有 entity_translucent（史莱姆外壳、玩家、盔甲架、经验球都在这一类），效果等价于方案 E。且「是否需要排序」无法从 RenderType 自动推导（取决于 mesh 是否凸/是否自重叠），白名单必须人工维护，判定标准脆弱（同类型不同模型可能一个凸一个不凸）。
+  ◆ E. 保持 DISABLED（现状，默认值已是 DISABLED）
+    做法: 不写代码。force_translucent_acceleration 默认 DISABLED 时，AcceleratedBufferSources.getBuffer 对 isTranslucent 的 RenderType 返回 null → 该几何回落到 vanilla MultiBufferSource，走 vanilla 的 per-entity + per-quad 排序。
+    可行性: 高（零成本，HEAD=4e8a7c9 已是此状态；上游 reFabricated 同样从不启用 supportTranslucent）。
+    风险: 低。代价可精确枚举：仅 entity 格式下 3 个 sortOnUpload 类型不加速——entity_translucent（史莱姆外壳、玩家、盔甲架、经验球、马纹、潜影贝子弹、头颅）、entity_translucent_emissive（监守者）、entity_translucent_cull_item_target（LivingEntityRenderer 的 item-target 模式）。此外 item_translucent/armor 透明件等也回落。主力负载（羊/牛等的 entity_cutout，方块/方块实体的 BLOCK 格式）完全不受影响。
+  ◆ F. 无光影加速 / 有光影回退（第三态）
+    做法: 在 getBuffer 门控里追加 `IrisApi.getInstance().isShaderPackInUse() == false` 条件（compat/iris 已有 IrisApi 使用先例）。
+    可行性: 高（两三行改动）。
+    风险: 对本症状无价值：用户实测「关光影 + force ENABLED」症状完全相同，说明半透明加速的失败与 gbuffer/MRT 无关，F 只是把同一 bug 藏在无光影时才暴露的位置。F 只对「Iris 专属」的那条问题线（memory/iris-shader-entity-invisible.md 的绘制时机/MRT）有意义，那是另一个问题。
+
+======================================================================
+AREA: vanilla 与加速路径的半透明实体绘制顺序逐项对比（史莱姆外壳/内层/眼睛）
+  [proven] vanilla 半透明实体的完整顺序链是『order 桶（升序）→ 桶内实体级距离排序 → 单一 RenderType 批次 → 上传前 per-quad 深度排序』四段，每段作用域不同
+     证据: LevelRenderer.lambda$addMainPass$0 字节码偏移：273 renderSolidFeatures() → 278 endBatch() → 390 renderTranslucentFeatures() → 395 endBatch() → 416 endOutlineBatch() → 525 renderTranslucentParticles() → 530 endBatch()。FeatureRenderDispatcher.renderTranslucentFeatures() 遍历 submitNodeStorage.getSubmitsPerOrder().values()（Int2ObjectAVLTreeMap，升序），每桶依次调 Shadow→Model→ModelPart→NameTag→Text→Item→Block→Custom。
+  [proven] 实体级排序：ModelFeatureRenderer.renderTranslucent 对 translucentModelSubmits 按 `-position.lengthSquared()` 排序（远者先），position 是 Storage.add 里 pose 变换原点的结果，即相机相对空间中的实体原点距离；粒度＝每个 order 桶内、跨所有 RenderType 的一张扁平表，只决定『写入顺序』不决定批次边界
+     证据: .decompile/net/minecraft/client/renderer/feature/ModelFeatureRenderer.java：`storage.translucentModelSubmits.sort(Comparator.comparingDouble(submit -> -submit.position().lengthSquared()))`；Storage.add 中 `Vector3f position = modelSubmit.pose().pose().transformPosition(new Vector3f())`，并按 hasBlending() 分流到 solidModelSubmits / translucentModelSubmits。
+  [proven] quad 级排序：sortQuads 只在 MultiBufferSource$BufferSource.endBatch(RenderType,BufferBuilder) 内调用，作用域是『某一个 RenderType 的单次 batch』，用当前投影矩阵对所有已累积 quad 按深度重排，然后才 draw
+     证据: .decompile/net/minecraft/client/renderer/MultiBufferSource.java 私有 endBatch(type,builder)：`MeshData mesh = builder.build(); if (mesh != null) { if (type.sortOnUpload()) { mesh.sortQuads(this.fixedBuffers.getOrDefault(type,this.sharedBuffer), RenderSystem.getProjectionType().vertexSorting()); } type.draw(mesh); }`。endBatch()（无参）先 endLastBatch() 再遍历 fixedBuffers.keySet() 逐个 flush。
+  [proven] 加速路径完全没有 quad 级排序，也没有任何等价物；工程内 grep sortQuads/VertexSorting 零命中，shader 目录只有 uploading/transform/culling，没有 sorting
+     证据: 在 src/main/java 全量 grep `sortQuads|VertexSorting|vertexSorting` 无命中（仅 GuiRenderTypes 的 sortOnUpload 参数）。src/main/resources/assets/acceleratedrendering/shaders 下 38 个 compute 文件，分类只有 compat|culling、compat|processing、compat|transform、compat|uploading、core|culling、core|transform、core|uploading —— 无排序程序。
+  [proven] 加速路径的『实体级排序』也丢了，但影响不可见：同一 (layer, RenderType) 的所有实体几何合成一次 drawIndexed，顶点顺序＝提交顺序
+     证据: AcceleratedBufferSource.drawBuffers：`for (int layerIndex : activeLayers) { for (var buffer : buffers) { contexts = buffer.getLayers().getOrDefault(layerIndex, …).get(drawType); … for (var drawContext : entry.getValue()) drawContext.drawElements(pass, drawContext.getRenderType().mode()); } }`。IDrawContext.compareTo（BaseVertexDrawContextPool 第 298-304 行）只做 `Boolean.compare(sortOnUpload, sortOnUpload)`，同 RenderType 恒返回 0；SimpleLayerContexts.prepare() 是空实现（只有 SortedLayerContexts 会 sort，且比较键仍只有 sortOnUpload 一个 boolean）。
+  [proven] 史莱姆内层 body 是 entity_cutout（无混合、不 sortOnUpload），所以内层+眼睛+嘴在 vanilla 全部走不透明通道，且**在加速路径也一样**走 OPAQUE 桶 —— 相对顺序『内层先、外壳后』两条路径完全一致，不是差异点
+     证据: SlimeModel.createInnerBodyLayer() 建 cube(-3,17,-3,6,6,6) + right_eye + left_eye + mouth；createOuterBodyLayer() 只建 cube(-4,16,-4,8,8,8)。EntityModel 构造器默认 `this(root, RenderTypes::entityCutout)`（.decompile/net/minecraft/client/model/EntityModel.java 第 14-16 行）。RenderTypes.ENTITY_CUTOUT（RenderTypes.java 第 99-110 行）没有 .sortOnUpload()。ModelFeatureRenderer.Storage.add 按 hasBlending() 分流，RenderType.hasBlending() = colorTargetState.blendFunction().isPresent()。
+  [proven] 史莱姆外壳是 entity_translucent，带 BlendFunction.TRANSLUCENT、cull(false)、sortOnUpload()，且**写深度**（ENTITY_SNIPPET 的 DepthStencilState.DEFAULT = LESS_THAN_OR_EQUAL + writeDepth=true）—— 所以外壳的 6 个面全部会光栅化并写深度，正确性完全依赖绘制先后
+     证据: RenderPipelines.ENTITY_TRANSLUCENT（.decompile/net/minecraft/client/renderer/RenderPipelines.java 第 248-257 行）：builder(ENTITY_SNIPPET).withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT)).withCull(false)；ENTITY_SNIPPET（第 52-59 行）含 .withDepthStencilState(DepthStencilState.DEFAULT)。DepthStencilState.DEFAULT = new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true)（.decompile/com/mojang/blaze3d/pipeline/DepthStencilState.java 第 9 行）。RenderTypes.ENTITY_TRANSLUCENT 链上带 .sortOnUpload()（RenderTypes.java 第 175-186 行）。
+  [proven] 关键差异：外壳 6 个面在 vanilla 被 sortQuads 按相机深度排成『远面先、近面后』，因而得到正确的两层 alpha 合成；加速路径按 ModelPart 多边形固定顺序（DOWN,UP,WEST,NORTH,EAST,SOUTH）提交，与相机无关，且深度状态是 LESS_THAN_OR_EQUAL + 写深度 → 后画的远面会被 depth test 直接丢弃，外壳合成层数/顺序随视角变化而错误
+     证据: ModelPart.Cube 构造器（.decompile/net/minecraft/client/model/geom/ModelPart.java 第 300-323 行）按 visibleFaces 依次填 polygons[pos++]：DOWN, UP, WEST, NORTH, EAST, SOUTH。Cube.compile 顺序遍历 this.polygons 写顶点。加速路径无重排（见上文 sortQuads 零命中），且用同一 pipeline（BaseVertexDrawContextPool.drawElements：`pass.setPipeline(renderType.pipeline())`）→ 同一深度状态。slime.png 实测：外壳区域 (0,0,32x16) alpha 恒为 180，内层 (0,16,24x12) 与眼睛 alpha 恒为 255（Python PIL 逐像素统计，整图 alpha 集合 = {0,8,180,255}）。
+  [proven] 回答问题 4：sortQuads **不会**把『外壳的后面』排到『内部的前面』之前。它只在单个 RenderType 的 batch 内排序，而内层(entity_cutout)与外壳(entity_translucent)是两个不同 RenderType、两个不同 builder，且内层提前由不透明通道整批画完 → quad 排序在物理上无法跨越这条边界
+     证据: sortQuads 的唯一调用点位于 endBatch(type, builder)，参数是单个 RenderType 的 BufferBuilder；entity_cutout 与 entity_translucent 是不同 RenderType 实例（Util.memoize 按 texture+affectsOutline 缓存，各自独立），在 BufferSource.startedBuilders 中是两个条目、两个 MeshData。另外 ModelFeatureRenderer.Storage.add 已按 hasBlending() 把二者分别送进 solidModelSubmits（renderSolidFeatures 阶段）与 translucentModelSubmits（renderTranslucentFeatures 阶段）。
+  [proven] 回答问题 4 的第二半：在**同一 RenderType 内部**，quad 排序确实会跨 order 桶边界 —— 因为 sortOnUpload 的 RenderType 不在 fixedBuffers 里，走共享 builder，且 QUADS 的 canConsolidateConsecutiveGeometry()==true 使 builder 被复用，于是多个 order 桶的同 RenderType 几何累积进同一 batch 一起排序
+     证据: RenderBuffers 构造器（.decompile/net/minecraft/client/renderer/RenderBuffers.java 第 24-35 行）fixedBuffers 只放 cutoutItemSheet/translucentItemSheet/armorEntityGlint/glint/glintTranslucent/entityGlint/waterMask + 两个 block sheet，**不含 entity_translucent** → 走 sharedBuffer 与 lastSharedType 分支。RenderType.canConsolidateConsecutiveGeometry() = `!this.mode().connectedPrimitives`（RenderType.java 第 148 行）；VertexFormat.Mode.QUADS(4, 4, false) → connectedPrimitives=false → 返回 true（.decompile/com/mojang/blaze3d/vertex/VertexFormat.java 第 202 行）。
+  [proven] 结论（回答问题 5）：order 顺序在两条路径下是一致的，保住 order 顺序并不够。加速路径半透明几何出错的根因就是缺失 quad 级深度排序；order 桶只决定『哪个 RenderType 的几何在什么时候提交』，而单个半透明模型（一个 RenderType）内部的前后关系 100% 由 sortQuads 提供
+     证据: 三点交叉：(a) 内层/外壳的相对顺序在两条路径下相同（见上文 entity_cutout / entity_translucent 分流）；(b) 加速路径无任何重排（grep 零命中 + shader 目录无排序程序）；(c) vanilla 的外壳正确性只能来自 endBatch 里的 sortQuads，别处没有排序逻辑。
+  [likely] 顺序不是唯一变量：加速路径接管半透明后，Iris 的 Phase 决定被绕过，且 FeatureConfig 独立于 LayerStorageType —— 但这两点只在开光影时叠加，无光影复现不能由它们解释
+     证据: LevelRendererMixin.drawAcceleratedTranslucent 在非 SEPARATED 时把 drawType 降级为 ALL，但分相位的 drawBuffers 调用本身仍在（先 OPAQUE 后 ALL）→ 与配置解耦。Iris 侧证据见 memory/iris-shader-entity-invisible.md（Iris$beginTranslucents 挂点）。
+  [speculative] 『外壳消失 / 内层不透明 / 眼睛全黑』的逐像素成因尚未被字节码直接证实；已证实的只是『外壳混合层数与顺序错误』。眼睛区域的差异可能被放大是因为眼睛贴图本身极暗（RGB 22,40,16），外壳 alpha 从正确两层(0.510)掉到一层(0.180)时，暗像素的相对变化远大于亮绿色 body
+     证据: slime.png 实测：眼睛区 (32,0,8x8) 主色 (22,40,16,255)，内层 body 区主色 (126,191,110,255) 与 (81,160,62,255)，外壳区主色 (115,194,98,180)。算术：一层外壳 0.180·(115,194,98)+0.820·(81,160,62) ≈ (87,166,68)；两层 0.328·(115,194,98)+0.672·(81,160,62) ≈ (92,171,74) —— 差异很小，说明单纯合成层数错误不足以解释症状，需抓帧确认。
+  [speculative] 另有一条与排序无关的候选变量：加速路径的半透明顶点若缺少 mc_midTexCoord / at_tangent 等属性会改变贴图采样与光照，仓库最近一次提交正是补这两个属性，因此用户实测所用的构建是否包含该修复会显著影响结论
+     证据: git log 顶点提交 01c564c 之后新增的任务记录『在加速路径填充 mc_midTexCoord 与 at_tangent』（任务 #12，已完成）。CPU 侧无法确认用户实际运行的 jar 是否为该构建。
+  ◆ 维持 force_translucent_acceleration = DISABLED（现状/回退）
+    做法: 半透明 RenderType 经 AcceleratedBufferSources.getBuffer 的 `!isTranslucent(renderType)` 判定回退 vanilla 管线，外壳走 sortQuads，视觉正确。内层 cutout 仍加速，性能收益保留大半。
+    可行性: 立即可用（默认值已经是 DISABLED，FeatureConfig.java 第 186 行）
+    风险: 低。仅损失半透明几何的加速收益；用户已实测此配置下一切正常。是当前唯一被实测验证的方案。
+  ◆ 为半透明层实现 GPU 端 per-quad 深度排序
+    做法: 新增一个 compute shader，在 selectTransformProgramDispatcher 之后、drawBuffers 之前，按每个 (layer, RenderType) 的 quad 质心相机空间深度重排 index/element segment（写回元素缓冲）。管线已有 elementSegment + compute 基础设施（MeshUploadingProgramDispatcher / TransformProgramDispatcher / CullingProgramDispatcher），只需新增一个 sorting program + 相机 uniform（CoreFeature 已持有 projectionMatrix 与世界矩阵）。
+    可行性: 中高。基础设施齐备，但需要新写 entity_quad_sorting_shader.compute 与对应 program dispatcher，并处理『排序后 quad 顺序改变』对 element segment 复用/缓存的影响（MeshDataCacheType.MERGED 会跨帧复用 mesh，排序结果不能缓存进 mesh）。
+    风险: 中。每帧每个半透明 draw 一次 compute，可能在 1100 实体场景抵消加速收益；且 per-quad 排序必须按 quad 质心而非顶点，实现细节多。无 RenderDoc 可验证。
+  ◆ CPU 端一次排序（prepareBuffers 阶段重排 element segment）
+    做法: 在 prepareBuffers() 构建 elementSegment 时，对 drawType==TRANSLUCENT 的 builder 按 quad 质心的 modelView 深度降序填入索引，从而在不新增 shader 的前提下还原 sortQuads 语义。
+    可行性: 中。需在 AcceleratedBufferSource.prepareBuffers 的 per-builder 循环里按 RenderType.sortOnUpload() 分支处理，且要拿到相机矩阵（CoreFeature.getProjectionMatrix/世界矩阵已在 LevelRendererMixin HEAD 捕获）。
+    风险: 中高。CPU 排序每次缓冲重建都要重算，可能成为新的瓶颈；若 element segment 跨帧缓存则排序结果会过期。
+  ◆ 决定性诊断实验：把外壳贴图/外壳 RenderType 单独切开验证
+    做法: 构造一个只含外壳（SlimeOuterLayer 单独调用）的测试路径：在 force_translucent_acceleration=ENABLED 下临时把外壳的 tint alpha 强制为 255 并使纹理 alpha 全 1，观察眼睛是否仍黑。若仍黑 → 问题在顶点数据/属性（mc_midTexCoord/at_tangent/UV/颜色），与排序无关；若恢复正常 → 确认是混合顺序问题。
+    可行性: 高。纯代码开关，无需 RenderDoc/gradle runClient（用户自己看画面）。
+    风险: 低。唯一代价是用户需要再跑一次游戏。这是把『已证实的外壳混合错误』与『症状描述』对上号的唯一低成本手段。
+
+======================================================================
+AREA: 史莱姆（Slime）完整渲染结构：模型分层 / RenderType / 绘制顺序 / 三症状成因分解
+  [proven] SlimeModel 由两个不同的 ModelLayer 构建，几何完全不同：(a) createOuterBodyLayer 只有 root.cube 一个 part，addBox(-4,16,-4, 8,8,8)、texOffs(0,0)、LayerDefinition 64x32 —— 这就是「外壳（大半透明正方体）」；(b) createInnerBodyLayer 有 4 个子 part：cube addBox(-3,17,-3, 6,6,6) texOffs(16,16)、right_eye addBox(-3.25,18,-3.5, 2,2,2) texOffs(32,0)、left_eye addBox(1.25,18,-3.5, 2,2,2) texOffs(32,4)、mouth addBox(0,21,-3.5, 1,1,1) texOffs(32,8)。外壳半径 4，内体半径 3，眼睛/嘴 z=-3.5 突出于内体前表面 z=-3。
+     证据: javap -p -c net/minecraft/client/model/monster/slime/SlimeModel.class：createOuterBodyLayer 偏移 13-45；createInnerBodyLayer 偏移 13-139（四个 addOrReplaceChild："cube"/"right_eye"/"left_eye"/"mouth"）
+  [proven] 眼睛与嘴不是「独立一层」，而是与内部 body 同属 createInnerBodyLayer 的同一个 SlimeModel 实例，因此三者共用同一个 RenderType（EntityModel 默认 entityCutout）和同一个绘制批。SlimeRenderer 未覆写 getRenderType，走 LivingEntityRenderer.getRenderType：bodyVisible 时 → model.renderType(texture) = RenderTypes.entityCutout(slime.png)；只有 (invisibleToPlayer && appearsGlowing) 才用 entityTranslucentCullItemTarget，appearsGlowing 才用 outline。
+     证据: EntityModel 构造器 invokedynamic → RenderTypes.entityCutout(Identifier)（EntityModel.class BootstrapMethods #26 = REF_invokeStatic RenderTypes.entityCutout）；SlimeRenderer.class 常量池只有 textures/entity/slime/slime.png，无任何 RenderTypes.entityTranslucent 引用；LivingEntityRenderer.getRenderType 字节码偏移 0-43
+  [proven] 外壳走 SlimeOuterLayer.submit：order(1) + RenderTypes.entityTranslucent(SLIME_LOCATION)；若 appearsGlowing&&isInvisible 则 order(1) + RenderTypes.outline(SLIME_LOCATION)。主模型走 SubmitNodeStorage.submitModel，而 SubmitNodeStorage.submitModel/submitShadow/submitFlame/submitText 全部硬编码 order(0)。即：内部（含眼睛/嘴）落在 order 桶 0，外壳落在 order 桶 1。
+     证据: SlimeOuterLayer.submit 偏移 50-84（order(1)+outline）与 87-116（order(1)+entityTranslucent）；SubmitNodeStorage.submitModel 偏移 0-2 为 iconst_0 + invokevirtual order(I)；SubmitNodeStorage.submitShadow/submitFlame/submitText 同样 iconst_0
+  [proven] 纹理实证：slime.png 是 64x32 索引色 PNG，palette[0]=(0,0,0,alpha 0)。外壳 UV 区域 (0,0)-(8,8)、right_eye (32,0)-(34,2)、left_eye (32,4)-(34,6)、mouth (32,8)-(33,9) 在这些采样矩形内**全部是 index 0 全透明像素**；只有内体 UV (16,16)-(22,22) 含 (81,160,62,255)/(117,185,100,255)/(126,191,110,255) 等 alpha=255 的绿色。结论：眼睛/嘴不是「黑贴图」，而是与外壳一样靠 alpha 混合/裁剪才可见的全透明几何。
+     证据: 自写 PNG 解码（zlib + 逐行反滤波 + 4bit 索引查 PLTE/tRNS）对四个 UV 矩形取样，输出集合仅为 [(0,0,0,0)]；内体矩形输出含 alpha 255 的绿色
+  [proven] entity_cutout 的 pipeline ENTITY_CUTOUT **没有 ColorTargetState**（不混合）；entity_translucent 的 ENTITY_TRANSLUCENT 有 ColorTargetState(BlendFunction.TRANSLUCENT)。两者都由 ENTITY_SNIPPET 构建，故深度状态同为 DepthStencilState.DEFAULT（depthTest LESS_THAN_OR_EQUAL，writeDepth=true）；两者都带 ALPHA_CUTOUT define(0.1) 与 PER_FACE_LIGHTING，且 withCull(false)。GlCommandEncoder.applyPipelineState 据此 _disableBlend()/ _enableBlend()+_blendFuncSeparate。
+     证据: javap RenderPipelines：ENTITY_SNIPPET 偏移 265-318（MATRICES_FOG_LIGHT_DIR_SNIPPET + core/entity 顶点/片元 + Sampler0/Sampler2 + DefaultVertexFormat.ENTITY + DepthStencilState.DEFAULT）；ENTITY_CUTOUT 偏移 1719-1729（withCull(false)，无 withColorTargetState）；ENTITY_TRANSLUCENT 偏移 1850-1913（1890 new ColorTargetState，1894 BlendFunction.TRANSLUCENT，1900 withColorTargetState，1903 withCull(false)）；GlCommandEncoder.applyPipelineState 偏移 110-177
+  [proven] vanilla 的每 block 顺序：renderSolidFeatures 按 Int2ObjectAVLTreeMap 升序遍历 order 桶（顺序确定），但**桶内的不透明几何按 RenderType 哈希分组，HashMap 迭代顺序不定**，且同一 RenderType 的所有提交（整只羊、整只史莱姆、所有同 type 实体）共享一个 BufferBuilder 一次画出。renderTranslucentFeatures 则把 translucentModelSubmits 按「位姿原点到相机距离平方的负值」**全局排序后再逐条绘制**（跨实体、跨类型交错），完全没有按 RenderType 分批。
+     证据: FeatureRenderDispatcher.renderSolidFeatures 偏移 0-52（getSubmitsPerOrder().values() 迭代 + ModelFeatureRenderer.renderSolid）；ModelFeatureRenderer.renderSolid 偏移 0-16 → renderBatch → Storage.solidModelSubmits 是 new HashMap（Storage.<init> 偏移 5-12），renderBatch 偏移 0-154 直接遍历 entrySet；ModelFeatureRenderer.renderTranslucent 偏移 0-19 调 List.sort(Comparator.comparingDouble(lambda$renderTranslucent$0))，lambda 体为 Vector3f.lengthSquared() 后 fneg；renderTranslucents 偏移 30-50 逐条 getBuffer(renderType)+renderModel
+  [proven] 26.1 的帧图 pass 体是 Runnable（FramePass.executes(Runnable)），在 FrameGraphBuilder.execute 时同步执行，不是录制命令。因此渲染 pass 内的一切 GL/dispatch 都发生在帧图执行期，读全局状态的推理成立。
+     证据: javap FramePass：public abstract void executes(java.lang.Runnable)；javap FrameGraphBuilder：addPass/execute(GraphicsResourceAllocator,…)
+  [proven] Mod 侧：加速 layer 号**仅**取自原版 order 桶序号，没有相机距离参与。FeatureRenderDispatcherMixin 对 renderSolidFeatures / renderTranslucentFeatures 的每个桶 pushOrderLayer：layer.get()（从 0 递增）→ CoreFeature.forceSetDefaultLayer(bucketIndex)。物理上所有实体都在「块 0 的渲染 pass」内提交，故 bucketIndex 恒为 0 → forceSetDefaultLayer(0)。
+     证据: FeatureRenderDispatcherMixin.pushOrderLayer 全函数；EntityRenderDispatcher.submit 偏移 110-112（submit(poseStack, collector)）+ LevelRenderer.submitEntities 偏移 63-112 在单一 SubmitNodeCollector 上对每个实体调用；ModelFeatureRenderer.renderSolid/renderTranslucent 均在单次调用内遍历全部桶
+  [proven] Mod 侧：加速路径完全没有按距离重排（全项目 grep sortQuads/VertexSorting 零命中）；IDrawContext.compareTo 只比较 RenderType.sortOnUpload() 一个 boolean，同 RenderType 恒返回 0。LayerDrawType 也由 sortOnUpload() 决定（getDrawType）。
+     证据: BaseVertexDrawContextPool.DrawContext.compareTo（Boolean.compare(this.getRenderType().sortOnUpload(), that…)）；RenderTypeUtils.getDrawType 字节码 at 338-340（return renderType.sortOnUpload() ? TRANSLUCENT : OPAQUE）；SimpleLayerContexts.prepare() 与 ILayerStorage.prepare() 空实现；SortedLayerContexts.prepare() 只 sort(naturalOrder())
+  [proven] Mod 侧：SEPARATED 存储下，OPAQUE 批在 renderSolidFeatures() 之后（此时 isBeforeTranslucent 仍 true）绘制，TRANSLUCENT 批在 endOutlineBatch() 之后绘制 —— 即「不透明几何先画、半透明几何后画」在加速路径中是被正确保留的。
+     证据: D:/Programs/MC/26.1/AcceleratedRendering-Ported/src/main/java/com/namelessgod2008/core/mixins/LevelRendererMixin.java（drawAcceleratedOpaque 锚在 renderSolidFeatures 的 Shift.AFTER；drawAcceleratedTranslucent 锚在 endOutlineBatch 的 Shift.AFTER，且仅 SEPARATED 时画 TRANSLUCENT）；vanilla lambda$addMainPass$0 内 273 renderSolidFeatures … 416 endOutlineBatch
+  [proven] Mod 侧：entity_translucent 能否进加速管线由 force_translucent_acceleration 单一开关决定。AcceleratedBufferSources.getBuffer 的条件为 (shouldForceAccelerateTranslucent() || supportTranslucent || !isTranslucent)，而 CoreBuffers.CORE 的 builder 未调用 supportTranslucent()，IrisCompatBuffers 同样没有 —— 故 DISABLED 时 entity_translucent 恒返回 null（回退原版）。Config 注释自述「本 mod 的加速缓冲源均未启用 supportTranslucent —— 即当前加速管线不支持半透明排序」。
+     证据: AcceleratedBufferSources.getBuffer 条件表达式；CoreBuffers.CORE builder 链（.source×7 + .mode×2，无 .supportTranslucent()）；FeatureConfig.java coreForceTranslucentAcceleration 的 .comment 与 .defineEnum("force_translucent_acceleration", FeatureStatus.DISABLED)
+  [likely] 推论（关键）：因为眼睛/嘴与内部 cube 共用同一个 RenderType(entityCutout)、同一个 AcceleratedBufferBuilder、同一个 RenderPass 与同一次 drawIndexed，「眼睛全黑而身体正常」**不可能**由 RenderType/pipeline/批次差异解释，只能由「同一 pipeline 下 alpha=0 的像素未被丢弃、被当作不透明黑像素写出」解释。
+     证据: 由 Fact 2（同 RenderType）+ Fact 5（BaseVertexDrawContextPool.drawElements 只按 layerKey(layer,renderType) 分批，pass.setPipeline(renderType.pipeline()) 每 draw 一致）+ 纹理实证（眼区全 alpha=0、rgb=0,0,0）三者交叉推出
+  [speculative] 推论（关键，可用于排除法）：外壳「消失」与眼睛「全黑」在同一渲染路径下**互斥**。若 ALPHA_CUTOUT(0.1) 在加速路径生效，alpha=0 的眼/嘴像素会被 discard → 眼睛应当「看不见」而非「黑」；若 ALPHA_CUTOUT 不生效，同样 alpha=0 的外壳就应当是「一整块黑的不透明方块」而非「消失」。两种情形不能同时出现，故三条症状不可能由单一成因（例如纯排序错误、纯 pipeline 差异）解释 —— 外壳必定是根本没被绘制（或被画到别的目标）。
+     证据: Fact 4（外壳/眼/嘴贴图同为全 alpha=0）+ Fact 5（两者 pipeline 都带 ALPHA_CUTOUT 0.1 且都不混合），按 alpha 处理链逐情形推演
+  [likely] 推论（可排除项）：深度排序/绘制时机**不是**外壳消失的原因。加速路径中 entity_cutout（体+眼）在 OPAQUE 相位绘制、entity_translucent（外壳）在 TRANSLUCENT 相位绘制，且外壳半径 4 > 内体半径 3，外壳后画且更靠近相机 → 深度测试必然通过，不可能被内体遮挡。
+     证据: Fact 10（OPAQUE 相位严格早于 TRANSLUCENT 相位）+ Fact 1（外壳 addBox 从 -4 到 +4，内体从 -3 到 +3）
+  ◆ 确认外壳是否真的「零绘制」
+    做法: 在 AcceleratedBufferSource.drawBuffers / prepareDraw 加临时探针，按 LayerKey.renderType 分别打印 Builder 数、vertexCount、count；对比 force ENABLED/DISABLED 两次运行中 entity_translucent 是否出现。若 ENABLED 下 entity_translucent 的 count==0 或 ctx 为空 → 几何在提交阶段就被丢了（ModelPart compile / mesh collector 侧），与绘制无关。
+    可行性: 高：AccelStats 已有同类计数器（BUILDER_COUNT/DRAWS/VERTICES），照抄即可
+    风险: 低，只加日志
+  ◆ 区分「alpha 未丢弃」与「贴图采样失败」
+    做法: 临时把 force ENABLED 下的 slime 贴图替换为一张 alpha 全 255 的同尺寸图（或把 SlimeRenderer 换成 entitySolid）。若眼睛从「黑」变「正常绿」→ 是 alpha=0 像素被写黑（ALPHA_CUTOUT 失效）；若仍黑 → 是 Sampler0 绑定/采样路径问题（bindTexture 未生效，GL 返回 (0,0,0,1)）。
+    可行性: 高：改纹理 PNG 即可，无需改代码
+    风险: 低（需重载资源）
+  ◆ 用「无眼睛模型」对照实验隔离成因
+    做法: 临时改 createInnerBodyLayer 去掉 right_eye/left_eye/mouth（只剩 cube）。若黑斑随之消失而外壳仍不见 → 确认「黑」全部来自 alpha=0 几何的未丢弃写出；同时可确认外壳问题与之独立。
+    可行性: 高：单文件单方法改动，本地构建
+    风险: 低
+  ◆ 直接验证 ALPHA_CUTOUT 是否随 pipeline 落地
+    做法: 静态核对 mod 是否对 entity 系列 RenderType 注册了 ProgramOverride / 自定义 shader program（core/programs/overrides + LoadShaderProgramOverridesEvent）。若加速绘制实际用的 program 与 renderType.pipeline() 编译出的 program 不是同一个，ALPHA_CUTOUT 就不会出现在片元着色器里 —— 这恰好能解释「alpha=0 未被 discard 而被写成黑」。
+    可行性: 中：需通读 ProgramOverride 链与 ComputeShaderProgramLoader.isProgramsLoaded 的作用范围
+    风险: 无（纯静态）
+
+======================================================================
+AREA: 任务4：混合状态（blend/depth/pipeline）与「加速路径半透明几何消失」的确证根因
+  [proven] 【根因·确证】准备阶段 prepareBuffers() 被一次性守卫锁死在「不透明锚点」，而 entity_translucent 的顶点提交发生在它之后 → 半透明 drawContext 从未被投桶、其网格从未被 compute 上传/变换 → 整个半透明批次不画。这是「外壳消失」的直接原因，且与光影无关。
+     证据: AcceleratedBufferSource.java:129-137 `if (!used || prepared) return; ... prepared = true;`（一次性）；:180 `getDrawType(renderType)` 由 sortOnUpload 决定桶；:185-196 setupContext + `layers.get(layer).get(drawType).add(drawContext)` —— 桶的填充只在这里发生。LevelRendererMixin.java:118-135 drawAcceleratedOpaque 锚在 `renderSolidFeatures()V` INVOKE+AFTER（即 renderSolidFeatures 刚返回，早于 bufferSource.endBatch()），此处调 ENTITY.prepareBuffers() 并置 prepared=true；:143-161 drawAcceleratedTranslucent 锚在 `endOutlineBatch()V` INVOKE+AFTER。而 26.1 的 entity_translucent 顶点是在 renderTranslucentFeatures() 阶段才提交的（ModelFeatureRenderer.renderTranslucents → bufferSource.getBuffer(submit.renderType())），时间在 renderSolidFeatures 之后。第二次 drawAccelerated(TRANSLUCENT) 里 `CoreBuffers.ENTITY.prepareBuffers()` 因 prepared==true 直接 return（:130），既不 dispatch 新 builder，也不 add drawContext。
+  [proven] 【确证】史莱姆外层与内层分属两个不同的 LayerDrawType 桶：外壳 entity_translucent（sortOnUpload=true）→ TRANSLUCENT 桶；内层 entity_cutout（sortOnUpload=false）→ OPAQUE 桶。因此「内层可见、外壳消失」与「只有外壳批次丢失」在机制上完全对应。
+     证据: RenderTypes.java:175-187 ENTITY_TRANSLUCENT 定义含 .sortOnUpload()；RenderTypes.java:99-110 ENTITY_CUTOUT 定义无 sortOnUpload。SlimeOuterLayer.java 用 RenderTypes.entityTranslucent(SLIME_LOCATION)，并且 submitNodeCollector.order(1)。EntityModel.java:16-18 `super(root, RenderTypes::entityCutout)` ← SlimeModel 内层走 entity_cutout。RenderTypeUtils.java:338-340 `return renderType.sortOnUpload() ? LayerDrawType.TRANSLUCENT : LayerDrawType.OPAQUE;`。SeparatedLayerStorage.java:20-27 contexts[0]=translucent / [1]=opaque / [2]=All，get(type)=contexts[type.ordinal()]，与 LayerDrawType 枚举序 TRANSLUCENT,OPAQUE,ALL 一致（LayerDrawType.java:5-7）。
+  [proven] 【确证】Q1：pass.setPipeline(renderType.pipeline()) 确实完整应用了 BlendFunction（以及 depth test/func/mask、cull、polygonMode、polygonOffset、colorMask）。
+     证据: javap GlRenderPass.drawIndexed → GlCommandEncoder.executeDraw → trySetup，trySetup 偏移 594 `invokevirtual applyPipelineState:(Lcom/mojang/blaze3d/pipeline/RenderPipeline;)V`。applyPipelineState 偏移 94-200：`isCull()` → _enableCull/_disableCull；`getColorTargetState().blendFunction().isPresent()` → _enableBlend + _blendFuncSeparate(srcColor,destColor,srcAlpha,destAlpha)，else _disableBlend；另有 _enableDepthTest/_depthFunc/_depthMask/_polygonOffset(或 disable)/_polygonMode(GL_FRONT_AND_BACK)/_colorMask(writeMask)。ENTITY_TRANSLUCENT 的 pipeline 带 ColorTargetState(BlendFunction.TRANSLUCENT)（RenderPipelines.java ENTITY_TRANSLUCENT），故 blend 一定被打开。
+  [proven] 【确证】Q2：同一 RenderPass 内多次 setPipeline 时 blend 会正确切换。lastPipeline 只是「同一 RenderPipeline 实例则跳过」的缓存，实例不同即整段重放；且每个新 pass 都会把 lastPipeline 置 null，第一次 setPipeline 必然完整应用。
+     证据: GlCommandEncoder.applyPipelineState 偏移 0-14：`if (lastPipeline == pipeline) return; this.lastPipeline = pipeline;` 然后无条件重放全部状态（含 blend）。GlCommandEncoder.createRenderPass 偏移 166-168：`aload_0; aconst_null; putfield lastPipeline` —— 建 pass 时清空缓存。entity_cutout 与 entity_translucent 的 pipeline 是两个不同 RenderPipeline 对象（RenderPipelines.ENTITY_CUTOUT vs ENTITY_TRANSLUCENT），故切换必定触发 _disableBlend ↔ _enableBlend+_blendFuncSeparate。注意 lastProgram 不被 createRenderPass 清空（只清 lastPipeline），这是正确的：program 未变就无需 _glUseProgram。
+  [proven] 【确证】Q3 结论一：当前代码下 OPAQUE 与 TRANSLUCENT 的 drawContext 永远不会落进同一个 RenderPass。drawBuffers 的外层循环取的是单一 drawType 桶（layers[layer].get(drawType)），每次只对一个桶开 pass。
+     证据: AcceleratedBufferSource.java:241-301：`for (layerIndex : activeLayers) for (buffer : buffers) { contexts = ...get(drawType); ... byTarget ... createRenderPass ... drawElements }` —— contexts 来自单个 drawType 桶，且 drawBuffers(OPAQUE)/drawBuffers(TRANSLUCENT) 是两次独立调用（LevelRendererMixin.java:132 与 :151）。所以「OPAQUE 与 TRANSLUCENT 同 pass」的前提不成立。
+  [proven] 【确证】Q3 结论二：真正共享同一个 pass 的是「同一 drawType 桶内的多个不同 RenderType」，这一点由 Q1/Q2 保证正确（每次 draw 前 applyPipelineState 重放 blend/depth/cull，且 drawFromBuffers 每次重绑 VAO）。此外 scissor 在每个 draw 前被显式重置再按需启用，不会泄漏到下一个 draw。
+     证据: GlCommandEncoder.drawFromBuffers 偏移 0-24 每次都调 device.vertexArrayCache().bindVertexArray(pipeline.info().getVertexFormat(), pass.vertexBuffers[0])。trySetup 末尾偏移 1234-1266 无条件按 pass.isScissorEnabled() 应用或关闭 scissor。BaseVertexDrawContextPool.java:227-239 每次 draw 先 pass.disableScissor() 再按 RenderSystem.getScissorStateForRenderTypeDraws() 启用。
+  [proven] 【确证】Q4：加速路径创建 RenderPass 的 depth 参数与 vanilla 完全一致，没有差异。两者都是 color 不清理(OptionalInt.empty)、depth 纹理 = useDepth ? (outputDepthTextureOverride ?? renderTarget.getDepthTextureView()) : null、depth 不清理(OptionalDouble.empty)。
+     证据: AcceleratedBufferSource.java:265-283 与 BaseVertexDrawContextPool.java:181-201 均为 `createRenderPass(..., color, OptionalInt.empty(), depth, OptionalDouble.empty())`；对照 vanilla RenderType.java:85-90（1.26.1 源码 `createRenderPass(() -> "Immediate draw for "+name, colorTexture, OptionalInt.empty(), depthTexture, OptionalDouble.empty())`）。GlCommandEncoder.createRenderPass 偏移 53-148：只有 OptionalInt/OptionalDouble isPresent 时才算 clearFlags，flags==0 时不调 _clear；偏移 151-163 的 _viewport 则无条件按 color texture 尺寸设置。
+  [proven] 【确证】加速路径完全没有 per-quad 深度排序（vanilla 靠 MeshData.sortQuads 保证半透明写深度也正确）。这是真实缺陷，但只会造成自遮挡/互相遮挡顺序错误，不会让几何整体消失。
+     证据: 全项目 grep `sortQuads` / `VertexSorting` 零命中。BaseVertexDrawContextPool.java（IDrawContext.compareTo）：`return Boolean.compare(this.getRenderType().sortOnUpload(), that.getRenderType().sortOnUpload());` 同 RenderType 恒返回 0。SimpleLayerContexts.prepare() 空实现（SortedLayerContexts.prepare() 只做 naturalOrder 排序，比较器同上）。vanilla 对照：MultiBufferSource.BufferSource.endBatch(RenderType,BufferBuilder) 内 `if (type.sortOnUpload()) mesh.sortQuads(buffer, RenderSystem.getProjectionType().vertexSorting());`。
+  [proven] 【确证】半透明 pipeline 写深度是 vanilla 原有设计，不是移植引入的偏差（ENTITY_TRANSLUCENT 复用 ENTITY_SNIPPET 的 DepthStencilState.DEFAULT = LEQUAL + writeDepth=true）。所以「写深度」本身不能作为异常的解释，除非同时缺少 per-quad 排序。
+     证据: RenderPipelines：ENTITY_SNIPPET 定义（offset 300-318）`withVertexFormat(DefaultVertexFormat.ENTITY, VertexFormat.Mode.QUADS)` + `withDepthStencilState(DepthStencilState.DEFAULT)`；ENTITY_TRANSLUCENT（offset 1856-1913）用 builder(ENTITY_SNIPPET) 只追加 withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT)) 与 withCull(false)，未覆盖 depth state。
+  [proven] 【确证】geforce_translucent_acceleration=DISABLED 时该 RenderType 根本不会进入加速路径，故症状消失 —— 与用户实测完全吻合，且独立佐证「只有半透明批次出问题」。
+     证据: AcceleratedBufferSources.getBuffer 的准入条件（AcceleratedBufferSources.java:41-48）：`(CoreFeature.shouldForceAccelerateTranslucent() || supportTranslucent || !RenderTypeUtils.isTranslucent(renderType))`；CoreBuffers.CORE 构建时未调 supportTranslucent()（CoreBuffers.java:22-33 只有 .source/.mode），故 entity_translucent 必须靠 shouldForceAccelerateTranslucent() 才被加速。返回 null 时 BufferBuilderMixin.getAccelerated() 返回 null → ModelPartMixin.compile 的 `!extension.isAccelerated()` 分支不 cancel → 走 vanilla。
+  [likely] 【推断】「眼睛全黑」很可能是外壳缺失的连带观感：眼睛是内层 entity_cutout 模型的 right_eye/left_eye 立方体，与 body 同一 RenderType、同一 draw、同一图层，画面上不会单独丢失。
+     证据: SlimeModel.createInnerBodyLayer() 只有一个 LayerDefinition：cube + right_eye + left_eye + mouth 全部在同一个 ModelPart 树里，由 ModelPartMixin.render 一次性写入同一个 mesh/同一个 builder（features/modelparts/mixins/ModelPartMixin.java:129-150 遍历 cubes/polygons）。因此它们与 body 同生共死。
+  [proven] 【确证】同一个 RenderPass 内不同 RenderType 的 depth/剔除状态切换由 applyPipelineState 保证；但有一处值得注意：GlRenderPass.setPipeline 的去重比较的是 `RenderPipeline` 实例，而不是 RenderType。同一个 pipeline、不同纹理的多个 RenderType 会命中缓存短路（这是正确的，因为 blend/depth 由 pipeline 决定，纹理由 bindTexture 单独处理）。
+     证据: GlRenderPass.setPipeline 偏移 0-15：`if (pipeline != null && pipeline.info() != renderPipeline) {...} ; this.pipeline = device.getOrCompilePipeline(renderPipeline);`（比较 info() 即原 RenderPipeline）。GlCommandEncoder.applyPipelineState 偏移 0-14 同样比较 RenderPipeline 实例。
+  [proven] 【确证】另有同源的次级问题：若 renderTranslucentFeatures 阶段触发了环形缓冲切换（getBuffer 里 vertexBuffer == null → ringBuffers.get(true)），新加入 this.buffers 的 Buffers 也不会被 prepareBuffers 处理（因为已经跑过），其全部 builder 同样丢失。这让根因 1 的影响面从「半透明」扩大到「任何在锚点之后提交的几何」。
+     证据: AcceleratedBufferSource.java:78-96：`if (vertexBuffer == null) { currentBuffer = ringBuffers.get(true); ... buffers.add(currentBuffer); }`；prepareBuffers 的 `for (var buffer : buffers)` 循环只在 prepared==false 时执行一次；drawBuffers 里 `buffer.bindDrawBuffers()` 仍会为新 Buffers 建 VAO（AcceleratedBufferSource.java:236），但其 layers 桶为空 → 该 (layer, buffer) 迭代 `contexts.isEmpty()` 直接 continue。
+  [proven] 【确证】IrisGbufferBridge 的类注释里已经记录过「同一症状」，其机器成因（半透明几何写进错误纹理）与本次根因不同，但症状描述一致（外壳消失 / 内层小方块显示为不透明）—— 说明该症状在本项目里出现过至少两次，不能凭症状相似就归因到 Iris。
+     证据: compat/iris/IrisGbufferBridge.java（`redirectToGbuffer()` 内中文注释）：「曾硬绑 defaultFB，导致半透明几何写错目标 —— 实测症状为『史莱姆外壳消失、内层小方块显示为不透明』」。
+  [likely] 【排除】顶点数据/布局/法线不会导致整批几何消失。transform 计算着色器的输出与 ENTITY 顶点格式逐字段一致（Location/Color/UV0/UV1/UV2/Normal）。
+     证据: MemUtils.putMatrix3f 注释声明按 std430 每列 4 float 布局写入 3 个分量；entity_vertex_transform_shader.compute 的 struct Vertex 为 {x,y,z,color,u0,v0,uv1,uv2,normal}，与 VanillaBufferEnvironment 用的 DefaultVertexFormat.ENTITY（Position,Color,UV0,UV1,UV2,Normal）一一对应。顶点写入 struct 的错误只会在屏幕上看成几何错位/光照异常，不会让一个 (layer, drawType) 桶整体不画 —— 后者由「桶里没有 drawContext」唯一决定。
+  ◆ 把 prepareBuffers 的「一次性 prepared 守卫」改成「按 builder 增量 dispatch + 按桶投放」
+    做法: 删除全局 prepared 布尔；改为在 prepareBuffers(drawType) 里对每个 (buffer, layerKey) 判断 builder 是否已处理（builder 已有 setOutdated()/isOutdated() 语义可用，或加一个 @Getter/@Setter boolean processed），只对未处理的 builder 做 mesh-uploading/transform dispatch 与 setupContext + `layers.get(layer).get(RenderTypeUtils.getDrawType(renderType)).add(drawContext)`。这样第二次调用（TRANSLUCENT 锚点）只捞到 entity_translucent 等半透明 builder，不会重复 dispatch 不透明几何。注意 drawBuffers 每次绘制后都会 contexts.reset()，故已画过的 OPAQUE 桶不会重复投放造成重绘。
+    可行性: 高。改动局限在 AcceleratedBufferSource.prepareBuffers + 一个 builder 字段；保留 01c564c 的 Iris 双锚点拆分（不动 LevelRendererMixin）。
+    风险: 中等。若不慎让 OPAQUE builder 在第二次被重新 dispatch，会重复消耗 GPU 时间（因为 OPAQUE 桶已 reset 并已绘制，不会重绘，只是白跑一次 compute）。需保证 dispatch 只对 processed==false 的 builder 执行。
+  ◆ 半透明改由「迟到绘制」承担：把 drawAccelerated(TRANSLUCENT) 的 prepareBuffers 换成在 drawBuffers 入口按需补做
+    做法: 在 AcceleratedBufferSource.drawBuffers(drawType) 开头调用一次本类型的「增量 prepare」（同方案 1 的增量逻辑），即把「上传+变换+投桶」和「绘制」绑定在同一函数里，彻底消除「调用顺序决定正确性」的隐式契约。
+    可行性: 高。与方案 1 是同一改动的两种落点，但取消了 LevelRendererMixin 必须记得在每次 drawBuffers 前调 prepareBuffers 的隐式约束。
+    风险: 中。drawBuffers 内部要求「所有命令编码（mapBuffer/writeToTexture）在开 pass 之前」，增量 prepare 必须放在第一个 createRenderPass 之前（当前代码结构已满足）。
+  ◆ 退化为单次迟绘制：仅在 endOutlineBatch 之后调一次 drawBuffers(ALL)
+    做法: 把 LevelRendererMixin 的两个锚点合并回一个（endOutlineBatch INVOKE+AFTER），一次 prepareBuffers + drawBuffers(ALL)。drawBuffers(ALL) 取 SeparatedLayerStorage.AllContexts，其 iterator = Iterators.concat(opaqueContexts, translucentContexts)，顺序天然是「先不透明后半透明」，正确。
+    可行性: 高（代码更少），但会回退 01c564c 修好的 Iris 问题（OPAQUE 必须落在 isBeforeTranslucent==true 期间才能写进 deferred 会采样的 gbuffer）。
+    风险: 高（对 Iris）。若采用，应配 GbufferBridge.get() != null 时才走双锚点、否则走单锚点，等于把两套时序都留着。
+  ◆ 为加速半透明补 per-quad 深度排序（对齐 vanilla sortQuads）
+    做法: 在 prepareBuffers 投桶前，对 drawType==TRANSLUCENT 的 builder 按其四边形重心到相机的距离做一次降序重排（可复用 RenderSystem.getProjectionType().vertexSorting() 的 VertexSorting，或直接在 CPU 侧重排顶点）+ 重生成 element segment 索引。
+    可行性: 中。需要新的 compute 或 CPU 排序路径，且要在 element segment 已 setup 之后才能改索引，改动面比前三个方案大得多。
+    风险: 中。这是修「多只羊/多层外壳互相遮挡顺序错误」的独立问题，不修「消失」。建议作为根因修复后的第二步。注意：01c564c 之前记录的「实体堆叠闪烁」很可能就是这一项。
+  ◆ 修正 entity_translucent 的深度写入（writeDepth=false）
+    做法: 为 TRANSLUCENT 桶单独准备一个不带 DepthStencilState（或 writeDepth=false）的 RenderPipeline/RenderType。
+    可行性: 低。26.1 的 RenderType 不可复制重建（RenderTypeUtils.withDepth 目前只能返回原对象），必须新注册一个 pipeline 并在 build 时替换，且会脱离 vanilla 语义（vanilla 半透明同样写深度，靠 sortQuads 兜底）。
+    风险: 高（偏离 vanilla 且与 Iris/Photon 的 gbuffer 约定不一致）。不推荐作为首选。
+

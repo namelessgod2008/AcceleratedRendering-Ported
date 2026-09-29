@@ -93,6 +93,54 @@ public final class AccelStats {
 	// ---- 物品加速（临时探针）----
 	public static long ITEM_CALLS	= 0L;
 
+	// [AR-PROBE-ITEM] 物品加速各守卫的拒因统计（每种原因只打印一次，附计数）
+	private static final java.util.Map<String, long[]> ITEM_PROBE = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/** [AR-PROBE-ITEM] 记录一次物品加速的守卫结果 */
+	public static void itemProbe(String reason, String detail) {
+		var slot = ITEM_PROBE.computeIfAbsent(reason, k -> new long[1]);
+
+		synchronized (slot) {
+			slot[0] ++;
+
+			if (slot[0] <= 3) {
+				System.out.println("[AR-PROBE-ITEM] " + reason + " (" + slot[0] + ") " + detail);
+			}
+		}
+	}
+
+	// [AR-PROBE-ITEM2] renderQuad 的调用与缓存命中计数
+	public static long ITEM_QUAD_MISS	= 0L;	// 未命中缓存（需构建网格）
+	public static long ITEM_QUAD_HIT	= 0L;	// 命中缓存
+
+	/** [AR-PROBE-ITEM2] 记录一次 renderQuad */
+	public static void itemProbe2(boolean cacheHit) {
+		if (cacheHit) {
+			ITEM_QUAD_HIT ++;
+		} else {
+			ITEM_QUAD_MISS ++;
+		}
+	}
+
+	/** [AR-PROBE-ITEM] 各拒因的累计计数，形如 GATE=12,FOIL=3,TAKEOVER=1024 */
+	private static String itemProbeSummary() {
+		if (ITEM_PROBE.isEmpty()) {
+			return "-";
+		}
+
+		var sb = new StringBuilder();
+
+		for (var e : ITEM_PROBE.entrySet()) {
+			if (sb.length() > 0) {
+				sb.append(',');
+			}
+
+			sb.append(e.getKey()).append('=').append(e.getValue()[0]);
+		}
+
+		return sb.toString();
+	}
+
 	// ---- 缓冲归零（临时探针，判定「预热不收敛」）----
 	public static long RESET_CALLS		= 0L;	// MappedBuffer.reset() 次数
 	public static long RESET_MAX_POS	= 0L;	// reset 时观察到的最大 position（应远小于容量）
@@ -199,6 +247,8 @@ public final class AccelStats {
 				+ " mdMeshVerts=" + MD_MESH_VERTS
 				+ " mdWg=" + MD_WORKGROUPS
 				+ " pool=" + RING_POOL_SIZE + " it=" + ITEM_CALLS
+				+ " itemProbe=" + itemProbeSummary()
+				+ " quadHit=" + ITEM_QUAD_HIT + " quadMiss=" + ITEM_QUAD_MISS
 				+ " ||| shadow=" + (SHADOW_NANOS / 1_000_000L) + "ms/s"
 				+ " shadowMiss=" + (SHADOW_MISS_NANOS / 1_000_000L) + "ms/s"
 				+ " sCalls=" + SHADOW_CALLS
@@ -278,6 +328,9 @@ public final class AccelStats {
 		DRAW_WALK_NANOS	= 0L;
 		POOL_EXPANDS	= 0L;
 		ITEM_CALLS		= 0L;
+		ITEM_PROBE		.clear();
+		ITEM_QUAD_HIT	= 0L;
+		ITEM_QUAD_MISS	= 0L;
 		POOL_CREATES	= 0L;
 		REUSE_HITS		= 0L;
 		RESET_CALLS		= 0L;

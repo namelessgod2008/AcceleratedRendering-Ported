@@ -21,6 +21,7 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.Setter;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import com.namelessgod2008.core.utils.FastColorCompat;
 import org.joml.Matrix3f;
@@ -75,6 +76,15 @@ public class AcceleratedBufferBuilder implements IAcceleratedVertexConsumer, Ver
 	private												long											sharingAddress;
 	private												int												activeSharing;
 	@Getter private		 								boolean											outdated;
+	/**
+	 * 「本帧已被 prepareBuffers 处理过」标志。
+	 *
+	 * <p>光影下半透明几何的顶点要到 {@code renderTranslucentFeatures} 阶段才提交，
+	 * 晚于不透明的绘制锚点，故 {@code prepareBuffers} 必须能被调用两次并做增量处理
+	 * （见 {@code AcceleratedBufferSource.prepareBuffers} 与 {@code LevelRendererMixin} 的双锚点）。
+	 * 该标志保证同一 builder 不会被重复 dispatch（白跑 compute）。
+	 */
+	@Getter @Setter private								boolean											prepared;
 
 	public AcceleratedBufferBuilder(
 			StagingBufferPool		.StagingBuffer		vertexBuffer,

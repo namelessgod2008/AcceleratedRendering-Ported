@@ -68,22 +68,32 @@ public class ItemFeatureRendererMixin {
 				||	!AcceleratedEntityRenderingFeature	.shouldUseAcceleratedPipeline	()
 				||	!AcceleratedItemRenderingFeature	.isEnabled						()
 		) {
+			// [AR-PROBE-ITEM]
+			com.namelessgod2008.core.AccelStats.itemProbe("GATE",
+					"loaded=" + CoreFeature.isLoaded()
+					+ " lvl=" + CoreFeature.isRenderingLevel()
+					+ " ent=" + AcceleratedEntityRenderingFeature.isEnabled()
+					+ " entPipe=" + AcceleratedEntityRenderingFeature.shouldUseAcceleratedPipeline()
+					+ " item=" + AcceleratedItemRenderingFeature.isEnabled());
 			return;
 		}
 
 		// 附魔光效需 VertexMultiConsumer 双写，加速管线不支持
 		if (submit.foilType() != ItemStackRenderState.FoilType.NONE) {
+			com.namelessgod2008.core.AccelStats.itemProbe("FOIL", String.valueOf(submit.foilType()));
 			return;
 		}
 
 		// 发光轮廓需额外写 outline 缓冲，同样不在加速范围内
 		if (submit.outlineColor() != 0) {
+			com.namelessgod2008.core.AccelStats.itemProbe("OUTLINE", String.valueOf(submit.outlineColor()));
 			return;
 		}
 
 		var quads = submit.quads();
 
 		if (quads.isEmpty()) {
+			com.namelessgod2008.core.AccelStats.itemProbe("EMPTY", "");
 			return;
 		}
 
@@ -100,16 +110,31 @@ public class ItemFeatureRendererMixin {
 
 		for (var renderType : byRenderType.keySet()) {
 			if (!bufferSource.getBuffer(renderType).getAccelerated().isAccelerated()) {
+				// [AR-PROBE-ITEM] 格式守卫失败 —— 物品的 RenderType 未被加速源接受
+				com.namelessgod2008.core.AccelStats.itemProbe("FMT",
+						"rt=" + renderType + " fmt=" + renderType.format().getVertexSize()
+						+ " mode=" + renderType.mode()
+						+ " translucent=" + com.namelessgod2008.core.utils.RenderTypeUtils.isTranslucent(renderType)
+						+ " dynamic=" + com.namelessgod2008.core.utils.RenderTypeUtils.isDynamic(renderType));
 				return;
 			}
 		}
 
 		ci.cancel();
 
+		// [AR-PROBE-ITEM] 成功接管
+		com.namelessgod2008.core.AccelStats.itemProbe("TAKEOVER", "rtCount=" + byRenderType.size());
+
 		var colors = new TintLayerColors(submit.tintLayers());
 
 		for (var entry : byRenderType.entrySet()) {
 			var extension = bufferSource.getBuffer(entry.getKey()).getAccelerated();
+
+			// [AR-PROBE-ITEM] doRender 前的实际状态
+			com.namelessgod2008.core.AccelStats.itemProbe("DORENDER",
+					"accel=" + extension.isAccelerated()
+					+ " quads=" + entry.getValue().size()
+					+ " rt=" + entry.getKey());
 
 			extension.doRender(
 					AcceleratedQuadsRenderer.INSTANCE,

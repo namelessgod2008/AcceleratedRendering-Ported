@@ -33,8 +33,6 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 
 	private					AcceleratedRingBuffers.Buffers			currentBuffer;
 	private 				boolean									used;
-	/** prepareBuffers 的幂等守卫（光影下绘制分两个时机，会调用两次） */
-	private 				boolean									prepared;
 	private					int										barriers;
 
 	public AcceleratedBufferSource(IBufferEnvironment bufferEnvironment) {
@@ -126,15 +124,31 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 		return builder;
 	}
 
+	/**
+	 * 上传 + 变换 + 按 (layer, drawType) 投桶。**支持增量调用**。
+	 *
+	 * <p><b>为什么必须增量</b>（2026-09-29 定位的「史莱姆外壳消失」根因）：
+	 * 光影下绘制被拆成两个时机（见 {@code LevelRendererMixin}）：
+	 * <pre>
+	 *   OPAQUE 锚：renderSolidFeatures() 之后（偏移 ~273）
+	 *   TRANSLUCENT 锚：endOutlineBatch() 之后（偏移 ~416）
+	 * </pre>
+	 * 而 26.1 的**半透明顶点要到 {@code renderTranslucentFeatures()}（偏移 ~390）才提交**
+	 * —— 即落在两个锚点之间。
+	 *
+	 * <p>早期实现用一个全局 {@code prepared} 布尔把本方法锁成「只能成功执行一次」，
+	 * 于是第二次调用（TRANSLUCENT 锚）直接 return：半透明 builder **从未被 dispatch、
+	 * drawContext 从未投进 TRANSLUCENT 桶** → 整个半透明批次不画。
+	 * 实测症状：史莱姆外壳消失、内部（不透明 entity_cutout）正常 —— 且**无光影同样复现**。
+	 *
+	 * <p>改为按 builder 的 {@code prepared} 标志增量处理：每个 builder 只被 dispatch 一次，
+	 * 后到的半透明 builder 在第二次调用时被补上。{@code drawBuffers} 每次绘制后会
+	 * {@code contexts.reset()}，故已画过的 OPAQUE 桶不会重复投放。
+	 */
 	public void prepareBuffers() {
-		if (!used || prepared) {
+		if (!used) {
 			return;
 		}
-
-		// 光影下绘制被拆成两个时机（不透明 / 半透明，见 LevelRendererMixin），
-		// prepareBuffers 会被调用两次。上传+变换只需做一次，否则同一批 builder
-		// 会被重复 dispatch、drawContext 也会被重复投进 OPAQUE 桶导致重绘。
-		prepared = true;
 
 		AccelStats.PREPARE_CALLS ++;
 
@@ -142,18 +156,27 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 			var elementBuffer	= buffer.getElementBuffer	();
 			var builders		= buffer.getBuilders		();
 
+			// 只挑本帧尚未处理过的 builder（增量）
+			var pending = new java.util.ArrayList<AcceleratedBufferBuilder>(builders.size());
+
+			for (var builder : builders.values()) {
+				if (!builder.isPrepared()) {
+					pending.add(builder);
+				}
+			}
+
+			if (pending.isEmpty()) {
+				continue;
+			}
+
 			long tQuery = System.nanoTime();
 			var program			= glGetInteger				(GL_CURRENT_PROGRAM);
 			AccelStats.GL_QUERY_NANOS += System.nanoTime() - tQuery;
 
-			if (builders.isEmpty()) {
-				continue;
-			}
-
 			long tUpload = System.nanoTime();
-			environment.selectMeshUploadingProgramDispatcher().dispatch	(builders.values(), buffer);
+			environment.selectMeshUploadingProgramDispatcher().dispatch	(pending, buffer);
 			long tTransform = System.nanoTime();
-			environment.selectTransformProgramDispatcher	().dispatch	(builders.values());
+			environment.selectTransformProgramDispatcher	().dispatch	(pending);
 			long tDone = System.nanoTime();
 
 			AccelStats.UPLOAD_NANOS		+= tTransform - tUpload;
@@ -164,8 +187,8 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 
 			long tBuilder = System.nanoTime();
 
-			for (var layerKey : builders.keySet()) {
-				var builder = builders.get(layerKey);
+			for (var builder : pending) {
+				builder.setPrepared(true);
 
 				if (builder.isEmpty()) {
 					continue;
@@ -173,6 +196,7 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 
 				AccelStats.BUILDER_COUNT ++;
 
+				var layerKey		= builder	.getLayerKey		();
 				var drawContext		= buffer			.getDrawContext		();
 				var elementSegment	= builder			.getElementSegment	();
 				var renderType		= layerKey			.renderType			();
@@ -326,7 +350,6 @@ public class AcceleratedBufferSource implements IAcceleratedBufferSource {
 		}
 
 		used			= false;
-		prepared		= false;
 		currentBuffer	= ringBuffers.get(false);
 
 		environment		.clear	();

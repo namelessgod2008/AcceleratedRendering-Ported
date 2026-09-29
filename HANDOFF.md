@@ -15,20 +15,21 @@
 | 实体加速（无光影） | ✅ 视觉正常、**240-291 fps**（1100 只羊场景，原版约 150 fps） |
 | 实体加速（**开光影**） | ✅ **不透明实体正常**（羊/箱子/守卫者/铁傀儡/熊猫），阴影正常 —— 2026-09-20 修复 |
 | 半透明实体（开光影） | ⚠️ **回退原版管线**（`force_translucent_acceleration = DISABLED`），加速路径有未突破的架构障碍，见下 |
-| **实体堆叠闪烁** | ❌ **未解决** —— 多只羊堆叠时遮挡关系持续闪烁，**无光影也复现**，`01c564c` 即存在 |
+| **实体堆叠闪烁** | ✅ **已结案·与本 mod 无关** —— 关闭实体加速后仍复现，属 vanilla/其它 mod 的 z-fighting |
 | 阴影加速 | ✅ 已加回并验证（`ShadowFeatureRendererMixin`，priority=999 压制 Sodium） |
 | layeringTransform（z-fighting） | ✅ 已修复（`RenderTypeUtils.applyLayeringTransform`） |
 | 其余功能（items GIU/text/geckolib/ftb 等） | ❌ 仍从编译排除（文件保留在磁盘），待逐项加回 |
 
 ### 当前两个已知问题
 
-**1. 实体堆叠闪烁（未解决，优先排查）**
-- 症状：多只羊堆叠时遮挡关系持续闪烁；**关闭光影同样复现** → 与 Iris 无关
-- `force_translucent_acceleration` 开/关都闪
-- 已排除：Iris gbuffer 重定向、本次会话的全部 Iris 改动（回退后仍闪）
-- **首要下一步**：关闭实体加速（走 vanilla）是否还闪 —— 这是区分「加速路径引入」与
-  「26.1 本身/其它 mod」的关键对照实验
-- 详见 `memory/entity-stacking-flicker.md`
+**1. 实体堆叠闪烁（已结案，不必再查）**
+- 症状：多只羊堆叠时遮挡关系持续闪烁
+- **用户实测：关闭实体加速后仍闪烁** → 与本 mod 无关
+- 属 vanilla 近共面 z-fighting 或其它 mod（Sodium 等）影响
+- 分析中已排除的项（若将来排查加速路径引入的 z-fighting 可省去重复劳动）见
+  `memory/entity-stacking-flicker.md`
+- ⚠️ 附带澄清：羊体/羊毛是 `entity_cutout`（`sortOnUpload=false` → OPAQUE），
+  **无论 `force_translucent_acceleration` 开还是关都走加速** —— 该开关对羊无影响
 
 **2. 半透明实体在光影下无法加速（架构障碍，已回退）**
 - 根因链（全部有实测证据）：
@@ -65,7 +66,7 @@
    |---|---|
    | `entity-acceleration-migration.md` | **最重要** —— 实体加速的绘制通道实现、26.1 时序约束、性能修复、一次错误修改的教训 |
    | `iris-shader-entity-invisible.md` | **2026-09-20 核心** —— 光影下实体消失的完整根因链 + 半透明加速的 MRT 架构障碍 |
-   | `entity-stacking-flicker.md` | **2026-09-20 未解决** —— 实体堆叠闪烁（无光影也复现） |
+   | `entity-stacking-flicker.md` | **已结案** —— 堆叠闪烁与本 mod 无关；含一批已排除项的字节码证据 |
    | `iris-outerwrapped-rendertype-unwrap.md` | Iris 包装 RenderType 必须在 `getBuffer` 入口解包，否则方块实体消失 |
    | `iris-vertexformat-padding-not-needed.md` | Iris 1.11.4 自带顶点对齐，旧 padding mixin 会导致 58 字节崩溃 |
    | `perf-10fps-investigation.md` | JDK 25 + LWJGL FFM 后端的反射级开销（10fps 卡顿结案） |
@@ -125,13 +126,12 @@
 
 按优先级：
 
-1. **【最高】排查实体堆叠闪烁**（未解决，见第一节）
-   首个对照实验：**关闭实体加速，看是否还闪**。
-   - 若不闪 → 问题在加速路径（深度精度 / 绘制顺序 / 深度写入状态）
-   - 若仍闪 → 问题在 26.1 本身或其它 mod（Sodium / Iris / 光影包）
-   细节与已排除项见 `memory/entity-stacking-flicker.md`。
+1. ~~排查实体堆叠闪烁~~ ✅ **已结案（2026-09-29）** —— 关闭实体加速后仍闪烁，与本 mod 无关。
+   属 vanilla 近共面 z-fighting 或其它 mod 影响。已排除项见 `memory/entity-stacking-flicker.md`。
 
-2. **【高】半透明实体在光影下的加速**（架构障碍，见第一节）
+2. **【最高】半透明实体（史莱姆）在光影下的渲染**（当前主攻方向）
+   症状：外壳消失 / 内部显示为不透明 / 眼睛全黑（仅在 `force_translucent_acceleration = ENABLED` 时）。
+   根因链见下，候选路径见第一节。
    三条候选路径（均未实施）：
    1. 复用 Iris 的 `GlFramebuffer` 实例（读 `ExtendedShader` 的 private 字段，需 mixin 暴露）
    2. 自建 MRT FBO（`IrisRenderSystem.framebufferTexture2D` + `drawBuffers`）—— 复制 Iris 逻辑，版本升级易碎
