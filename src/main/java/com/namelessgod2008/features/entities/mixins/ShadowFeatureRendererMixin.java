@@ -2,6 +2,7 @@ package com.namelessgod2008.features.entities.mixins;
 
 import com.namelessgod2008.core.AccelStats;
 import com.namelessgod2008.core.CoreFeature;
+import com.namelessgod2008.core.utils.RenderTypeUtils;
 import com.namelessgod2008.core.buffers.accelerated.builders.VertexConsumerExtension;
 import com.namelessgod2008.features.entities.AcceleratedEntityRenderingFeature;
 import com.namelessgod2008.features.entities.AcceleratedEntityShadowRenderer;
@@ -87,6 +88,13 @@ public class ShadowFeatureRendererMixin {
 		}
 
 		var renderType	= RenderTypes.entityShadow(Identifier.withDefaultNamespace("textures/misc/shadow.png"));
+
+		// entity_shadow 的 RenderSetup 链上**没有** sortOnUpload()，会被 getDrawType 判为 OPAQUE；
+		// 但它的写入时机在 renderTranslucentFeatures 期间（晚于 OPAQUE 锚点的绘制），
+		// 进 OPAQUE 桶会导致阴影永远不被绘制（2026-09-30 定位的回归）。
+		// 此处登记为强制 TRANSLUCENT —— 详见 RenderTypeUtils.getDrawType 的注释。
+		RenderTypeUtils.markForcedTranslucent(renderType);
+
 		var buffer		= bufferSource			.getBuffer			(renderType);
 		var extension	= buffer				.getAccelerated		();
 

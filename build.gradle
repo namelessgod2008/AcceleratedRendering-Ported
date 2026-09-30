@@ -3,7 +3,11 @@ plugins {
 	id 'maven-publish'
 }
 
-version = project.mod_version
+// 产物名带上 Minecraft 版本：
+//   acceleratedrendering-ported-1.0.15-alpha-26.1.jar
+//   acceleratedrendering-ported-1.0.15-alpha-26.1-sources.jar
+// 注：fabric.mod.json 里的 version 仍取 mod_version（不含 -26.1），与多数 mod 一致。
+version = "${project.mod_version}-${project.minecraft_version}"
 group = project.maven_group
 
 loom {

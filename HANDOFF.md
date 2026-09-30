@@ -14,7 +14,7 @@
 | `./gradlew build` / `compileJava` | ✅ 通过 |
 | 实体加速（无光影） | ✅ 视觉正常、**240-291 fps**（1100 只羊场景，原版约 150 fps） |
 | 实体加速（**开光影**） | ✅ **不透明实体正常**（羊/箱子/守卫者/铁傀儡/熊猫），阴影正常 —— 2026-09-20 修复 |
-| 半透明实体（开光影） | ⚠️ **回退原版管线**（`force_translucent_acceleration = DISABLED`），加速路径有未突破的架构障碍，见下 |
+| 半透明实体 | ✅ **已修复（`6ad465f`）** —— 真凶是 `prepareBuffers` 的一次性守卫，与 Iris/MRT **无关**；用户已验证「史莱姆正常」 |
 | **实体堆叠闪烁** | ✅ **已结案·与本 mod 无关** —— 关闭实体加速后仍复现，属 vanilla/其它 mod 的 z-fighting |
 | 阴影加速 | ✅ 已加回并验证（`ShadowFeatureRendererMixin`，priority=999 压制 Sodium） |
 | layeringTransform（z-fighting） | ✅ 已修复（`RenderTypeUtils.applyLayeringTransform`） |
@@ -32,6 +32,14 @@
   **无论 `force_translucent_acceleration` 开还是关都走加速** —— 该开关对羊无影响
 
 **2. 半透明实体在光影下无法加速（架构障碍，已回退）**
+
+> ⚠️ **2026-09-30 更新：本节结论已被推翻。** 真正的根因是 `AcceleratedBufferSource.prepareBuffers`
+> 的一个全局 `prepared` 布尔把「第二次调用」锁死，导致半透明 builder 从未被 dispatch
+> —— **与 Iris / MRT 完全无关**（决定性实验：关闭光影后症状一模一样）。
+> 已在 `6ad465f` 修复，用户验证通过。
+> 下面这条根因链**在开光影时仍然成立**（MRT 确实是障碍），但它**不是**根因，只是叠加因素。
+> 详见 `memory/iris-shader-entity-invisible.md` 文末的「2026-09-29」两节。
+
 - 根因链（全部有实测证据）：
   1. Photon 的半透明实体程序是 `DRAWBUFFERS:01` → **需 2 个 color attachment（MRT）**
   2. 而 26.1 的 `createRenderPass` **只支持单 color view**
@@ -65,7 +73,10 @@
    | 文件 | 内容 |
    |---|---|
    | `entity-acceleration-migration.md` | **最重要** —— 实体加速的绘制通道实现、26.1 时序约束、性能修复、一次错误修改的教训 |
-   | `iris-shader-entity-invisible.md` | **2026-09-20 核心** —— 光影下实体消失的完整根因链 + 半透明加速的 MRT 架构障碍 |
+   | `iris-shader-entity-invisible.md` | 光影下实体消失的根因链；**真凶是 prepareBuffers 守卫（文末 2026-09-29 节），与 MRT 无关** |
+   | `item-cache-identity-and-probe-overhead.md` | **2026-09-30 核心** —— 物品加速「完全无效」的真凶：缓存键用 builder 身份 + 热路径探针 |
+   | `drawtype-bucket-write-timing.md` | **2026-09-30 核心** —— 双锚点架构下「写入时机」与 drawType 桶必须一致，否则几何静默消失 |
+   | `mc26.1-vertex-transform-cpu-side.md` | 26.1 原版仍是 CPU 侧顶点变换的完整证据（零 compute/实例化/indirect） |
    | `entity-stacking-flicker.md` | **已结案** —— 堆叠闪烁与本 mod 无关；含一批已排除项的字节码证据 |
    | `iris-outerwrapped-rendertype-unwrap.md` | Iris 包装 RenderType 必须在 `getBuffer` 入口解包，否则方块实体消失 |
    | `iris-vertexformat-padding-not-needed.md` | Iris 1.11.4 自带顶点对齐，旧 padding mixin 会导致 58 字节崩溃 |
@@ -129,15 +140,16 @@
 1. ~~排查实体堆叠闪烁~~ ✅ **已结案（2026-09-29）** —— 关闭实体加速后仍闪烁，与本 mod 无关。
    属 vanilla 近共面 z-fighting 或其它 mod 影响。已排除项见 `memory/entity-stacking-flicker.md`。
 
-2. **【最高】半透明实体（史莱姆）在光影下的渲染**（当前主攻方向）
-   症状：外壳消失 / 内部显示为不透明 / 眼睛全黑（仅在 `force_translucent_acceleration = ENABLED` 时）。
-   根因链见下，候选路径见第一节。
-   三条候选路径（均未实施）：
+2. ~~半透明实体在光影下的渲染~~ ✅ **已修复（`6ad465f`，2026-09-29）** —— 用户已验证「史莱姆正常」。
+   真凶是 `prepareBuffers` 的一次性守卫，与 Iris/MRT 无关。详见 `memory/iris-shader-entity-invisible.md` 文末。
+
+   **遗留（开光影时的次要问题）**：Photon 的半透明实体程序是 `DRAWBUFFERS:01`，需 2 个 color
+   attachment，而 26.1 的 `createRenderPass` 只支持单 color view。目前
+   `force_translucent_acceleration` 已可开启（无光影下工作正常），但**开光影时半透明加速仍可能异常**。
+   若将来要攻，候选路径：
    1. 复用 Iris 的 `GlFramebuffer` 实例（读 `ExtendedShader` 的 private 字段，需 mixin 暴露）
-   2. 自建 MRT FBO（`IrisRenderSystem.framebufferTexture2D` + `drawBuffers`）—— 复制 Iris 逻辑，版本升级易碎
+   2. 自建 MRT FBO（`IrisRenderSystem.framebufferTexture2D` + `drawBuffers`）
    3. 按 RenderType 分组，让每个程序各开一个 RenderPass（绕开 `isSetup` 守卫）
-   **注意**：重做时第一天做过的「OPAQUE/TRANSLUCENT 拆分 + `trySetup` 重定向」确实修好了
-   不透明实体，可直接参考 —— 但需先解决/排除它与堆叠闪烁的关系。
 
 3. 逐项加回其余功能：从 `build.gradle` 的 `sourceSets` 排除列表中移除并适配
    （items GUI 部分、text、geckolib、ftb、modernui、tlm、create、emf 等）。

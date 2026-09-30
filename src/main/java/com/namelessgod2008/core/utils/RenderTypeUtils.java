@@ -335,7 +335,48 @@ public class RenderTypeUtils {
 		return renderType;
 	}
 
+	/**
+	 * 被强制归入 TRANSLUCENT 桶的 RenderType（按身份比较）。
+	 *
+	 * <p><b>为什么需要它</b>：{@link #getDrawType} 依据 {@code sortOnUpload()} 判断，
+	 * 但那只反映「是否需要 per-quad 深度排序」，**不反映「几何在哪个阶段被写入」**。
+	 * 二者在 26.1 的「提交-渲染两段式 + 双锚点」架构下必须一致：
+	 * <pre>
+	 *   renderSolidFeatures()        → 写入 OPAQUE 几何
+	 *   [OPAQUE 锚点] drawAccelerated(OPAQUE)      ← 只画 OPAQUE 桶
+	 *   renderTranslucentFeatures()  → 写入 TRANSLUCENT 几何
+	 *   [TRANSLUCENT 锚点] drawAccelerated(TRANSLUCENT)
+	 * </pre>
+	 * 若某几何在 {@code renderTranslucentFeatures} 期间写入、却被判为 OPAQUE，
+	 * 它就会进 OPAQUE 桶 —— 而那个桶**已经在前面画完了**，于是该几何永远不出现在画面上。
+	 *
+	 * <p><b>entity_shadow 正是这种情况</b>（2026-09-30 定位的回归）：
+	 * {@code RenderTypes.ENTITY_SHADOW} 的 {@code RenderSetup} 链上只有
+	 * {@code useLightmap()/useOverlay()/setLayeringTransform(...)}，**没有** {@code sortOnUpload()}
+	 * → 被判为 OPAQUE；但 vanilla 把它放在 {@code renderTranslucentFeatures} 的第一个调用
+	 * （{@code FeatureRenderDispatcher.java:81}），即写入时机在 OPAQUE 锚点之后。
+	 * 症状：开启实体加速后**所有实体阴影消失**，而 {@code sCalls/sPieces} 计数正常
+	 * （几何确实写进去了，只是进了不会被画的桶）。
+	 *
+	 * <p>该回归由 2026-09-20 引入的「OPAQUE/TRANSLUCENT 双锚点拆分」造成 ——
+	 * 阴影加速本身在 2026-09-14 已验证通过，那时只有单一绘制时机。
+	 *
+	 * <p>用**身份**比较而非 {@code toString()} 匹配：后者返回
+	 * {@code RenderType[name:RenderSetup[...]]}，字符串匹配脆弱且昂贵。
+	 * {@code RenderTypes.entityShadow(...)} 经 {@code Util.memoize} 缓存，实例稳定。
+	 */
+	private static volatile RenderType forcedTranslucent;
+
+	/** 由 {@code ShadowFeatureRendererMixin} 登记。 */
+	public static void markForcedTranslucent(RenderType renderType) {
+		forcedTranslucent = renderType;
+	}
+
 	public static LayerDrawType getDrawType(RenderType renderType) {
+		if (renderType != null && renderType == forcedTranslucent) {
+			return LayerDrawType.TRANSLUCENT;
+		}
+
 		return renderType.sortOnUpload() ? LayerDrawType.TRANSLUCENT : LayerDrawType.OPAQUE;
 	}
 

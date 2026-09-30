@@ -1,0 +1,445 @@
+# Accelerated Rendering — Minecraft 26.1 Port
+
+**Alpha · Status and Coverage**
+
+---
+
+# English
+
+## 1. About
+
+Accelerated Rendering is a **client-side** rendering modification that moves vertex
+transformation from the CPU to the GPU using **compute shaders**.
+
+Instead of multiplying every vertex by a model matrix on the CPU on every frame, the
+mod uploads model-space vertices once, caches the resulting mesh, and performs the
+transformation on the GPU. Repeated draws of the same geometry (for example, many
+copies of the same entity or the same dropped item) then share a single cached mesh
+and only differ by per-instance data such as transform, colour, light and overlay.
+
+This repository is a port of the original Minecraft **1.21.4** mod to Minecraft **26.1**.
+
+| | |
+|---|---|
+| Mod ID | `acceleratedrendering` |
+| Version | `1.0.15-alpha` |
+| Environment | Client only |
+| License | MIT |
+| Original author | Argon4W |
+| Port author | namelessgod2008 |
+
+## 2. Requirements
+
+| Component | Version |
+|---|---|
+| Minecraft | 26.1 |
+| Fabric Loader | 0.19.5 or newer |
+| Java | 25 or newer |
+| Fabric API | required |
+| Forge Config API Port | required (configuration screen) |
+
+## 3. Why the approach still applies in 26.1
+
+Minecraft 26.1 rewrote its rendering architecture, so it is worth stating explicitly
+that **vanilla 26.1 still performs vertex transformation on the CPU**:
+
+- **Entities and block entities** — `ModelPart.Cube.compile` calls
+  `matrix.transformPosition(...)` for every vertex of every cube, every frame.
+- **Items** — `VertexConsumer.putBakedQuad` calls `matrix.transformPosition(...)` for
+  every vertex of every quad.
+
+The vanilla vertex shaders only apply the camera rotation
+(`gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0)`, where `ModelViewMat`
+contains rotation but no translation). The model transform is therefore already baked
+into the vertex data on the CPU.
+
+26.1 contains no compute shaders, no instanced vertex attributes, and no indirect or
+multi-draw in vanilla. This mod's GPU-side transform has no vanilla equivalent, so the
+approach remains valid.
+
+## 4. Implemented features
+
+### 4.1 Entity and block-entity rendering acceleration
+
+Model geometry produced through `ModelPart` is intercepted, cached as GPU meshes and
+transformed on the GPU. This covers living entities, other entities, and block entities
+whose models are rendered through the same model pipeline (for example chests).
+
+- Mesh cache is keyed so that it survives across frames.
+- Draw batching layers reproduce the vanilla `order(int)` grouping, so armour, trims and
+  render layers keep their correct relative draw order.
+
+### 4.2 Item rendering acceleration
+
+Item model geometry (`BakedQuad`) is cached and transformed on the GPU.
+
+- Quads belonging to one item submission are **merged into a single mesh per
+  `(tintIndex, lightEmission)` group**, rather than one mesh per quad.
+- Per-vertex normals are baked in model space; the GPU applies the pose normal matrix,
+  which is mathematically equivalent to vanilla's
+  `pose.transformNormal(quad.direction().getUnitVec3f())`.
+- Per-instance colour, light and overlay are supplied at draw time, so a single cached
+  mesh serves every instance.
+
+### 4.3 Entity shadow acceleration
+
+Entity shadows are routed through the accelerated pipeline instead of the vanilla
+writer. Shadow geometry, alpha and shape data are taken from the values vanilla already
+computed during its extraction phase.
+
+### 4.4 Vanilla draw-order preservation
+
+26.1 renders entities in two stages: a submit stage that only records data, and a
+render stage that writes vertices. Because the accelerated path groups geometry by
+batch layer, the vanilla `order(int)` buckets are mapped onto accelerated layers so
+that the original relative draw order is restored.
+
+### 4.5 Shader pack compatibility (Iris)
+
+An Iris compatibility module is included and active. It handles:
+
+- Unwrapping of Iris-wrapped `RenderType` instances at the buffer entry point.
+- Re-routing accelerated output into the Iris G-buffer.
+- Shadow-pass awareness so that shadow rendering uses its own target.
+- Adaptation to the Iris 1.11.x API surface.
+
+### 4.6 Orientation culling
+
+Per-quad orientation culling is available as a program dispatcher integrated into the
+core draw path, with its own configuration section.
+
+### 4.7 Draw methods
+
+Two draw methods are supported and selectable:
+
+- **BASEVERTEX** (default) — uses a shared index buffer with a base vertex offset.
+- **INDIRECT** — executes indirect draws through a mixin bridge, since the 26.1
+  `RenderPass` API has no indirect entry point.
+
+### 4.8 Configuration
+
+Configuration is provided through Forge Config API Port, with an in-game configuration
+screen supplied by that library and a Mod Menu entry point.
+
+Sections include: core settings, accelerated entity rendering, accelerated item
+rendering, filters, Iris compatibility, culling, and mod compatibility toggles.
+
+## 5. Not implemented in this build
+
+The following parts of the upstream mod are **excluded from compilation** in this alpha.
+Source files are retained in the repository but are not compiled or registered.
+
+### 5.1 Item rendering
+
+- **GUI item rendering** — `features/items/gui/**` and `features/items/mixins/gui/**`
+  (GUI batching, accelerated blit / fill / gradient, string rendering).
+- **Whole-model baking path** — `ItemRendererMixin`, `ModelBlockRendererMixin`,
+  `features/items/mixins/models/**`, `features/items/mixins/accessors/**`.
+  These depend on classes removed in 26.1 (`ItemRenderer`, `BakedModel`,
+  `SimpleBakedModel`, `MultiPartBakedModel`, `WeightedBakedModel`) and have no direct
+  equivalent in the 26.1 architecture.
+- **Block/item colour helpers** — `BlockLayerColors`, `ColorHelper`,
+  `EmptyBlockColor`, `ItemLayerColors`, `IAcceleratedBakedModel`. 26.1 replaced the
+  block colour system with block tint sources; this acceleration path uses the tint
+  layers carried by item submissions instead.
+
+### 5.2 Dedicated feature modules
+
+Excluded entirely, pending porting:
+
+- GeckoLib (`features/geckolib`)
+- FTB (`features/ftb`)
+- Modern UI (`features/modernui`)
+- Text rendering (`features/text`)
+- Touhou Little Maid (`features/tlm`)
+- Create (`features/create`)
+- Entity Model Features (`features/emf`)
+- Simple Bedrock Model (`features/simplebedrockmodel`)
+
+The matching configuration entries exist but have no effect until these modules are
+ported.
+
+### 5.3 Filters
+
+`features/filter/**` is excluded except for the `FilterType` enum (which the
+configuration model depends on). Filter configuration entries are present but the
+filtering logic is not compiled into this build.
+
+### 5.4 Mod compatibility modules
+
+Excluded, pending porting:
+
+- ImmediatelyFast
+- TweakerMore
+- Tweakeroo
+- Xaero's Minimap / World Map
+- Roughly Enough Items
+- Trinkets
+- Sophisticated Backpacks
+- Forge Config API Port (the compatibility module; the library itself is still required)
+
+### 5.5 Miscellaneous
+
+- `InventoryScreenMixin`
+- `ParticleEngineMixin`
+- NeoForge helper classes (`ConfigScreen`, `IQuadTransformer`, `UnitTextureAtlasSprite`)
+
+### 5.6 Texture pixel download
+
+`TextureUtils.downloadTexture` returns `null` in this build, because reading texture
+pixels in 26.1 requires a `GpuDevice` command encoder. The culled mesh collector
+degrades safely when no texture is available.
+
+## 6. Known limitations
+
+- **Alpha quality.** This is a work in progress port; feature coverage is incomplete and
+  behaviour may change between builds.
+- **GUI acceleration is absent.** Item and text rendering inside containers and menus is
+  not accelerated.
+- **Indirect draw requires the mixin bridge.** Because 26.1's `RenderPass` has no
+  indirect entry point, the INDIRECT draw method relies on a mixin into the command
+  encoder. The BASEVERTEX method is the default.
+- **Diagnostics are currently enabled.** The build prints per-second diagnostic counters
+  prefixed with `[AR-FRAME]` and occasional `[AR-SLOW]` lines to the game log. These are
+  temporary and will be removed.
+- **Performance characteristics are not documented here.** This alpha makes no
+  performance claims.
+
+## 7. Compatibility notes
+
+- Sodium and Iris are detected at runtime; compatibility mixin configurations use a
+  plugin with a presence check so that they are only applied when the target mod is
+  installed.
+- The shadow acceleration mixin uses an elevated mixin priority so that it runs ahead of
+  Sodium's own shadow handling, allowing the accelerated pipeline to take over when its
+  guards are satisfied.
+- Mixin configurations that target absent mods are not registered, so a missing optional
+  dependency does not cause a crash.
+
+## 8. Summary table
+
+| Area | Status |
+|---|---|
+| Entity / block-entity model rendering | Implemented |
+| Item model rendering | Implemented |
+| Entity shadows | Implemented |
+| Vanilla draw-order preservation | Implemented |
+| Iris / shader pack support | Implemented |
+| Orientation culling | Implemented |
+| Indirect draw | Implemented (mixin bridge) |
+| Configuration screen | Implemented |
+| Item GUI rendering | Not implemented |
+| Whole-model baking path | Not implemented |
+| Text rendering | Not implemented |
+| Filters | Not implemented |
+| GeckoLib / FTB / ModernUI / TLM / Create / EMF / SBM | Not implemented |
+| Mod compatibility modules (see 5.4) | Not implemented |
+| Texture pixel download | Not implemented |
+
+---
+
+# 中文
+
+## 1. 简介
+
+Accelerated Rendering 是一个**客户端**渲染优化模组，它使用**计算着色器**把顶点变换从
+CPU 搬到 GPU。
+
+原版每一帧都要在 CPU 上把每个顶点乘以模型矩阵；本模组改为：把模型空间顶点上传一次、
+缓存成网格，变换交给 GPU 完成。同一几何被重复绘制时（例如大量同种实体、或大量同一种
+掉落物），它们共享同一份缓存网格，彼此之间只差「逐实例数据」——变换矩阵、颜色、
+光照、overlay。
+
+本仓库是原 **Minecraft 1.21.4** 版本到 **Minecraft 26.1** 的移植。
+
+| 项 | 值 |
+|---|---|
+| 模组 ID | `acceleratedrendering` |
+| 版本 | `1.0.15-alpha` |
+| 运行环境 | 仅客户端 |
+| 许可证 | MIT |
+| 原作者 | Argon4W |
+| 移植 | namelessgod2008 |
+
+## 2. 环境要求
+
+| 组件 | 版本 |
+|---|---|
+| Minecraft | 26.1 |
+| Fabric Loader | 0.19.5 或更高 |
+| Java | 25 或更高 |
+| Fabric API | 必需 |
+| Forge Config API Port | 必需（提供配置界面） |
+
+## 3. 为什么这个思路在 26.1 依然成立
+
+Minecraft 26.1 重写了整个渲染架构，因此有必要明确说明：**26.1 原版仍然在 CPU 侧做
+顶点变换**。
+
+- **实体与方块实体** —— `ModelPart.Cube.compile` 每帧对每个方块的每个顶点调用
+  `matrix.transformPosition(...)`。
+- **物品** —— `VertexConsumer.putBakedQuad` 对每个 quad 的每个顶点调用
+  `matrix.transformPosition(...)`。
+
+原版顶点着色器只负责相机旋转（`gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0)`，
+其中 `ModelViewMat` 只含旋转、不含平移），模型变换早已在 CPU 侧烘进顶点数据。
+
+26.1 原版既没有计算着色器，也没有实例化顶点属性，也没有 indirect / multi-draw。
+本模组的 GPU 侧变换在 26.1 原版中**没有对应实现**，因此该思路依然有效。
+
+## 4. 已实现的功能
+
+### 4.1 实体与方块实体渲染加速
+
+经由 `ModelPart` 产出的模型几何会被拦截、缓存为 GPU 网格并在 GPU 上变换。
+覆盖生物实体、其它实体，以及通过同一套模型管线渲染的方块实体（例如箱子）。
+
+- 网格缓存按可跨帧复用的方式建立索引。
+- 绘制批次层（layer）还原了原版 `order(int)` 的分组，因此盔甲、纹饰、各渲染层的
+  相对绘制顺序保持正确。
+
+### 4.2 物品渲染加速
+
+物品模型几何（`BakedQuad`）会被缓存并在 GPU 上变换。
+
+- 同一次物品提交内的 quad 会**按 `(tintIndex, lightEmission)` 分组，合并成每个分组
+  一个网格**，而不是每个 quad 一个网格。
+- 逐顶点法线以模型空间烘焙；GPU 侧再应用姿态法线矩阵，与原本的
+  `pose.transformNormal(quad.direction().getUnitVec3f())` 数学等价。
+- 逐实例的颜色、光照、overlay 在绘制时提供，因此一份缓存网格可服务所有实例。
+
+### 4.3 实体阴影加速
+
+实体阴影改由加速管线写入，不再走原版写入器。阴影的几何、透明度与形状数据直接取自
+原版在提取阶段已经算好的结果。
+
+### 4.4 原版绘制顺序还原
+
+26.1 的实体渲染是两段式：提交段只记录数据，渲染段才写顶点。由于加速路径按批次层分组
+几何，本模组把原版的 `order(int)` 桶映射为加速层，从而还原原本的相对绘制顺序。
+
+### 4.5 光影包兼容（Iris）
+
+内置并启用 Iris 兼容模块，负责：
+
+- 在缓冲入口处解包 Iris 包装过的 `RenderType` 实例。
+- 把加速输出重定向进 Iris 的 G-buffer。
+- 感知阴影阶段，使阴影渲染使用自己的渲染目标。
+- 适配 Iris 1.11.x 的 API 形态。
+
+### 4.6 朝向剔除
+
+逐 quad 的朝向剔除以「程序调度器」的形式内建于核心绘制路径，并有独立的配置分区。
+
+### 4.7 绘制方式
+
+支持两种绘制方式，可配置：
+
+- **BASEVERTEX**（默认）—— 使用共享索引缓冲 + 基准顶点偏移。
+- **INDIRECT** —— 由于 26.1 的 `RenderPass` API 没有 indirect 入口，该方式通过 mixin
+  桥接执行间接绘制。
+
+### 4.8 配置
+
+配置由 Forge Config API Port 提供，配置界面由该库自带，并通过 Mod Menu 提供入口。
+
+配置分区包括：核心设置、实体加速、物品加速、过滤器、Iris 兼容、剔除、模组兼容开关。
+
+## 5. 本版本尚未实现的部分
+
+以下上游功能在本 alpha 版本中**被排除出编译**。源码文件仍保留在仓库中，但不参与编译、
+也未注册。
+
+### 5.1 物品渲染相关
+
+- **GUI 物品渲染** —— `features/items/gui/**` 与 `features/items/mixins/gui/**`
+  （GUI 批处理、加速 blit / fill / gradient、字符串渲染）。
+- **整模型烘焙路径** —— `ItemRendererMixin`、`ModelBlockRendererMixin`、
+  `features/items/mixins/models/**`、`features/items/mixins/accessors/**`。
+  这些依赖 26.1 已移除的类（`ItemRenderer`、`BakedModel`、`SimpleBakedModel`、
+  `MultiPartBakedModel`、`WeightedBakedModel`），在 26.1 架构下没有直接对应物。
+- **方块/物品着色辅助类** —— `BlockLayerColors`、`ColorHelper`、`EmptyBlockColor`、
+  `ItemLayerColors`、`IAcceleratedBakedModel`。26.1 已用 block tint source 取代旧的
+  方块着色体系；本加速路径改用物品提交自带的 tint layer。
+
+### 5.2 独立功能模块
+
+以下模块整体排除，待移植：
+
+- GeckoLib（`features/geckolib`）
+- FTB（`features/ftb`）
+- Modern UI（`features/modernui`）
+- 文本渲染（`features/text`）
+- 车万女仆 TLM（`features/tlm`）
+- Create（`features/create`）
+- Entity Model Features（`features/emf`）
+- Simple Bedrock Model（`features/simplebedrockmodel`）
+
+对应的配置项已经存在，但在这些模块移植完成前不会生效。
+
+### 5.3 过滤器
+
+`features/filter/**` 除 `FilterType` 枚举（配置模型依赖它）外整体排除。
+过滤器配置项存在，但过滤逻辑未编入本版本。
+
+### 5.4 模组兼容模块
+
+以下兼容模块排除，待移植：
+
+- ImmediatelyFast
+- TweakerMore
+- Tweakeroo
+- Xaero 小地图 / 世界地图
+- REI（物品管理器）
+- Trinkets
+- Sophisticated Backpacks
+- Forge Config API Port（指其兼容模块；库本身仍然是必需的）
+
+### 5.5 其它
+
+- `InventoryScreenMixin`
+- `ParticleEngineMixin`
+- NeoForge 辅助类（`ConfigScreen`、`IQuadTransformer`、`UnitTextureAtlasSprite`）
+
+### 5.6 纹理像素下载
+
+本版本中 `TextureUtils.downloadTexture` 返回 `null` —— 26.1 读取纹理像素需要
+`GpuDevice` 的 command encoder。在拿不到纹理时，剔除网格收集器会安全降级。
+
+## 6. 已知限制
+
+- **Alpha 质量。** 这是进行中的移植版本；功能覆盖不完整，行为可能随版本变化。
+- **没有 GUI 加速。** 容器与菜单内的物品、文本渲染未加速。
+- **INDIRECT 绘制依赖 mixin 桥接。** 因为 26.1 的 `RenderPass` 没有 indirect 入口，
+  INDIRECT 方式依赖对命令编码器的 mixin。默认方式是 BASEVERTEX。
+- **诊断代码当前处于开启状态。** 本版本会向游戏日志每秒打印以 `[AR-FRAME]` 为前缀的
+  诊断计数，并偶尔打印 `[AR-SLOW]`。这些是临时代码，后续会移除。
+- **本文档不涉及性能。** 本 alpha 版本不对性能作任何声明。
+
+## 7. 兼容性说明
+
+- 运行时检测 Sodium 与 Iris；兼容用的 mixin 配置带有存在性判定插件，只有目标模组
+  已安装时才会应用。
+- 阴影加速 mixin 使用了更高的 mixin 优先级，以便先于 Sodium 自身的阴影处理执行，
+  在守卫条件满足时由加速管线接管。
+- 指向不存在模组的 mixin 配置不会注册，因此缺少可选依赖不会导致崩溃。
+
+## 8. 状态总览
+
+| 领域 | 状态 |
+|---|---|
+| 实体 / 方块实体模型渲染 | 已实现 |
+| 物品模型渲染 | 已实现 |
+| 实体阴影 | 已实现 |
+| 原版绘制顺序还原 | 已实现 |
+| Iris / 光影包支持 | 已实现 |
+| 朝向剔除 | 已实现 |
+| Indirect 绘制 | 已实现（mixin 桥接） |
+| 配置界面 | 已实现 |
+| 物品 GUI 渲染 | 未实现 |
+| 整模型烘焙路径 | 未实现 |
+| 文本渲染 | 未实现 |
+| 过滤器 | 未实现 |
+| GeckoLib / FTB / ModernUI / TLM / Create / EMF / SBM | 未实现 |
+| 模组兼容模块（见 5.4） | 未实现 |
+| 纹理像素下载 | 未实现 |

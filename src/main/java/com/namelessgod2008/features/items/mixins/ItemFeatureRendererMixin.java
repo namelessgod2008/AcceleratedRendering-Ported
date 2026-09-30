@@ -62,6 +62,9 @@ public class ItemFeatureRendererMixin {
 	) {
 		com.namelessgod2008.core.AccelStats.ITEM_CALLS ++;
 
+		// [AR-ITEMAUDIT]
+		final long tGate = System.nanoTime();
+
 		if (		!CoreFeature						.isLoaded						()
 				||	!CoreFeature						.isRenderingLevel				()
 				||	!AcceleratedEntityRenderingFeature	.isEnabled						()
@@ -90,12 +93,17 @@ public class ItemFeatureRendererMixin {
 			return;
 		}
 
+		com.namelessgod2008.core.AccelStats.ITEM_GATE_NANOS += System.nanoTime() - tGate;
+
 		var quads = submit.quads();
 
 		if (quads.isEmpty()) {
 			com.namelessgod2008.core.AccelStats.itemProbe("EMPTY", "");
 			return;
 		}
+
+		// [AR-ITEMAUDIT]
+		final long tGroup = System.nanoTime();
 
 		// 26.1 的 BakedQuad 自带 MaterialInfo（含 RenderType），一个 ItemSubmit 的 quads
 		// 可能分属多个 RenderType。必须按 RenderType 分组后分别交给各自的加速缓冲，
@@ -107,6 +115,11 @@ public class ItemFeatureRendererMixin {
 			byRenderType.computeIfAbsent(quad.materialInfo().itemRenderType(), ignored -> new java.util.ArrayList<>())
 					.add(quad);
 		}
+
+		com.namelessgod2008.core.AccelStats.ITEM_GROUP_NANOS += System.nanoTime() - tGroup;
+
+		// [AR-ITEMAUDIT]
+		final long tFmt = System.nanoTime();
 
 		for (var renderType : byRenderType.keySet()) {
 			if (!bufferSource.getBuffer(renderType).getAccelerated().isAccelerated()) {
@@ -120,31 +133,48 @@ public class ItemFeatureRendererMixin {
 			}
 		}
 
+		com.namelessgod2008.core.AccelStats.ITEM_FMT_NANOS += System.nanoTime() - tFmt;
+
 		ci.cancel();
 
-		// [AR-PROBE-ITEM] 成功接管
-		com.namelessgod2008.core.AccelStats.itemProbe("TAKEOVER", "rtCount=" + byRenderType.size());
+		// 注：这里曾有 TAKEOVER / DORENDER 两个 itemProbe 探针，它们的字符串拼接是**实参求值**、
+		// 每次调用都会执行（DORENDER 还带 RenderType.toString()，会打印整个 RenderSetup）。
+		// 实测二者合计 ~1.0 ms/帧（占物品路径的 1/3），已于 2026-09-30 移除。
+		// 需要重新诊断时，请改用「只在计数器上自增、不拼字符串」的形式。
 
+		final long tColors = System.nanoTime();
 		var colors = new TintLayerColors(submit.tintLayers());
+		com.namelessgod2008.core.AccelStats.ITEM_COLORS_NANOS += System.nanoTime() - tColors;
+
+		final long tDrLoop = System.nanoTime();
+
+		var pose = submit.pose();
 
 		for (var entry : byRenderType.entrySet()) {
-			var extension = bufferSource.getBuffer(entry.getKey()).getAccelerated();
+			// [AR-ITEMAUDIT]
+			final long tDrBuf = System.nanoTime();
 
-			// [AR-PROBE-ITEM] doRender 前的实际状态
-			com.namelessgod2008.core.AccelStats.itemProbe("DORENDER",
-					"accel=" + extension.isAccelerated()
-					+ " quads=" + entry.getValue().size()
-					+ " rt=" + entry.getKey());
+			var extension	= bufferSource.getBuffer(entry.getKey()).getAccelerated();
+			var context		= AcceleratedQuadsRenderer.context(entry.getValue(), colors);
+
+			com.namelessgod2008.core.AccelStats.ITEM_DR_BUF_NANOS += System.nanoTime() - tDrBuf;
+
+			// [AR-ITEMAUDIT]
+			final long tDrCall = System.nanoTime();
 
 			extension.doRender(
 					AcceleratedQuadsRenderer.INSTANCE,
-					AcceleratedQuadsRenderer.context(entry.getValue(), colors),
-					submit.pose().pose(),
-					submit.pose().normal(),
+					context,
+					pose.pose(),
+					pose.normal(),
 					submit.lightCoords(),
 					submit.overlayCoords(),
 					-1
 			);
+
+			com.namelessgod2008.core.AccelStats.ITEM_DR_CALL_NANOS += System.nanoTime() - tDrCall;
 		}
+
+		com.namelessgod2008.core.AccelStats.ITEM_DR_LOOP_NANOS += System.nanoTime() - tDrLoop;
 	}
 }

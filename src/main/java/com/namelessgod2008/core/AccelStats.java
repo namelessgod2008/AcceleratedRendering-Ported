@@ -122,6 +122,77 @@ public final class AccelStats {
 		}
 	}
 
+	// ==================== [AR-ITEMAUDIT] 物品加速路径成本审计（2026-09-30，临时）====================
+	// 目的：mdCpu 只覆盖 dense 上传循环；物品路径的其余部分（探针字符串拼接、按 RenderType 分组、
+	// 缓存 miss 重建、map 查找、对象分配）全是盲区。以下计时器把这个盲区切开。
+	// 口径与既有计时器一致：每秒累计纳秒，report() 后清零。
+
+	// ---- accelerateItem（ItemFeatureRendererMixin）：每个 ItemSubmit 一次 ----
+	public static long ITEM_GATE_NANOS		= 0L;	// 前置守卫 + foil/outline/empty 检查
+	public static long ITEM_GROUP_NANOS		= 0L;	// byRenderType 分组（含每 item 的 map/list 分配）
+	public static long ITEM_FMT_NANOS		= 0L;	// FMT 守卫循环（getBuffer × renderType 数）
+	public static long ITEM_PROBE_TAK_NANOS	= 0L;	// TAKEOVER 探针（含字符串拼接）
+	public static long ITEM_COLORS_NANOS	= 0L;	// new TintLayerColors
+	public static long ITEM_DR_LOOP_NANOS	= 0L;	// doRender 循环总计
+	public static long ITEM_DR_PROBE_NANOS	= 0L;	// 其中 DORENDER 探针（含 RenderType.toString）
+	public static long ITEM_DR_BUF_NANOS	= 0L;	// 其中 getBuffer + context 分配
+	public static long ITEM_DR_CALL_NANOS	= 0L;	// 其中 doRender 本体（进入 AcceleratedQuadsRenderer）
+
+	// ---- AcceleratedQuadsRenderer：render() 每个 submit 一次；miss 分支每 quad 一次 ----
+	public static long ITEM_RENDER_NANOS	= 0L;	// render() 整段（hit + miss + write）
+	public static long ITEM_MISS_GATHER_NANOS = 0L;	// miss：createMeshCollector+decorate+addVertex+flush+getData
+	public static long ITEM_MISS_GET_NANOS	= 0L;	// miss：merges.get（含 MeshData.hashCode，O(n)）
+	public static long ITEM_MISS_PUT_NANOS	= 0L;	// miss：merges.put + byBuilder.put（再算一遍 hashCode）
+	public static long ITEM_MISS_BLD_NANOS	= 0L;	// miss：真正 build 网格（二级缓存未命中时）
+	public static long ITEM_MISS_TOT_NANOS	= 0L;	// miss 路径总计
+	public static long ITEM_MISS_BUILDS		= 0L;	// miss 且二级缓存也未命中（真正建了网格）
+	public static long ITEM_RENDERIN_NANOS	= 0L;	// render() 入口的 RENDER-IN 探针（含 getSimpleName）
+
+	// ---- 缓存结构健康度 ----
+	public static long ITEM_MESHES_SIZE		= 0L;	// meshes.size()：应为「不同 quad 实例数」，有界
+	public static long ITEM_MERGES_SIZE		= 0L;	// merges.size()：应为「不同几何数」，有界
+	public static long ITEM_INNERMAP_MAX	= 0L;	// 观察到的内层 builder→mesh map 最大 size
+	/** ★不随每秒清零★：内层 map 累计新增条目 —— 泄漏指示器（预期 ≈ 每秒 miss 数 × 秒数）*/
+	public static long ITEM_INNERMAP_TOTAL	= 0L;
+
+	/** [AR-ITEMAUDIT] 记录一次内层缓存 put，并维护泄漏指标 */
+	public static void itemAuditInnerPut(int innerSize) {
+		if (innerSize > ITEM_INNERMAP_MAX) {
+			ITEM_INNERMAP_MAX = innerSize;
+		}
+
+		ITEM_INNERMAP_TOTAL ++;
+	}
+
+	/** [AR-ITEMAUDIT] accelerateItem 各段耗时（ms/s），形如 gate=1/grp=37/fmt=2/... */
+	private static String itemAuditSummary() {
+		return "gate="		+ (ITEM_GATE_NANOS		/ 1_000_000L)
+			+ "/grp="		+ (ITEM_GROUP_NANOS		/ 1_000_000L)
+			+ "/fmt="		+ (ITEM_FMT_NANOS		/ 1_000_000L)
+			+ "/takP="		+ (ITEM_PROBE_TAK_NANOS	/ 1_000_000L)
+			+ "/colors="	+ (ITEM_COLORS_NANOS	/ 1_000_000L)
+			+ "/drLoop="	+ (ITEM_DR_LOOP_NANOS	/ 1_000_000L)
+			+ "/drProbe="	+ (ITEM_DR_PROBE_NANOS	/ 1_000_000L)
+			+ "/drBuf="		+ (ITEM_DR_BUF_NANOS	/ 1_000_000L)
+			+ "/drCall="	+ (ITEM_DR_CALL_NANOS	/ 1_000_000L)
+			+ "/render="	+ (ITEM_RENDER_NANOS	/ 1_000_000L)
+			+ "/rinP="		+ (ITEM_RENDERIN_NANOS	/ 1_000_000L)
+			+ "/mGath="		+ (ITEM_MISS_GATHER_NANOS / 1_000_000L)
+			+ "/mGet="		+ (ITEM_MISS_GET_NANOS	/ 1_000_000L)
+			+ "/mPut="		+ (ITEM_MISS_PUT_NANOS	/ 1_000_000L)
+			+ "/mBld="		+ (ITEM_MISS_BLD_NANOS	/ 1_000_000L)
+			+ "/mTot="		+ (ITEM_MISS_TOT_NANOS	/ 1_000_000L)
+			+ "/mBuilds="	+ ITEM_MISS_BUILDS;
+	}
+
+	/** [AR-ITEMAUDIT] 缓存结构实时快照 */
+	private static String itemAuditCache() {
+		return "meshes="	+ ITEM_MESHES_SIZE
+			+ " merges="	+ ITEM_MERGES_SIZE
+			+ " innerMax="	+ ITEM_INNERMAP_MAX
+			+ " innerTotal=" + ITEM_INNERMAP_TOTAL;
+	}
+
 	/** [AR-PROBE-ITEM] 各拒因的累计计数，形如 GATE=12,FOIL=3,TAKEOVER=1024 */
 	private static String itemProbeSummary() {
 		if (ITEM_PROBE.isEmpty()) {
@@ -249,6 +320,8 @@ public final class AccelStats {
 				+ " pool=" + RING_POOL_SIZE + " it=" + ITEM_CALLS
 				+ " itemProbe=" + itemProbeSummary()
 				+ " quadHit=" + ITEM_QUAD_HIT + " quadMiss=" + ITEM_QUAD_MISS
+				+ " ||||||||||| [ITEMAUDIT] " + itemAuditSummary()
+				+ " | " + itemAuditCache()
 				+ " ||| shadow=" + (SHADOW_NANOS / 1_000_000L) + "ms/s"
 				+ " shadowMiss=" + (SHADOW_MISS_NANOS / 1_000_000L) + "ms/s"
 				+ " sCalls=" + SHADOW_CALLS
@@ -331,6 +404,28 @@ public final class AccelStats {
 		ITEM_PROBE		.clear();
 		ITEM_QUAD_HIT	= 0L;
 		ITEM_QUAD_MISS	= 0L;
+		// [AR-ITEMAUDIT]
+		ITEM_GATE_NANOS			= 0L;
+		ITEM_GROUP_NANOS		= 0L;
+		ITEM_FMT_NANOS			= 0L;
+		ITEM_PROBE_TAK_NANOS	= 0L;
+		ITEM_COLORS_NANOS		= 0L;
+		ITEM_DR_LOOP_NANOS		= 0L;
+		ITEM_DR_PROBE_NANOS		= 0L;
+		ITEM_DR_BUF_NANOS		= 0L;
+		ITEM_DR_CALL_NANOS		= 0L;
+		ITEM_RENDER_NANOS		= 0L;
+		ITEM_MISS_GATHER_NANOS	= 0L;
+		ITEM_MISS_GET_NANOS		= 0L;
+		ITEM_MISS_PUT_NANOS		= 0L;
+		ITEM_MISS_BLD_NANOS		= 0L;
+		ITEM_MISS_TOT_NANOS		= 0L;
+		ITEM_MISS_BUILDS		= 0L;
+		ITEM_RENDERIN_NANOS		= 0L;
+		ITEM_MESHES_SIZE		= 0L;
+		ITEM_MERGES_SIZE		= 0L;
+		ITEM_INNERMAP_MAX		= 0L;
+		// ITEM_INNERMAP_TOTAL 故意不清零 —— 它是跨秒的泄漏累计指示器
 		POOL_CREATES	= 0L;
 		REUSE_HITS		= 0L;
 		RESET_CALLS		= 0L;
