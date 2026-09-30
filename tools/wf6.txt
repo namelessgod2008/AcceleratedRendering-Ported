@@ -1,0 +1,47 @@
+======================================================================
+AREA: 实体加速 vs 物品加速的 mesh 粒度差异（26.1 端口）
+  [proven] 物品加速的 mesh 粒度 = 1 个 quad = 4 顶点/实例（已证实）。26.1 AcceleratedQuadsRenderer.renderQuad 对每个 quad 建一个 meshCollector 并 build 一个 mesh；内层循环 `for (vertex = 0; vertex < BakedQuad.VERTEX_COUNT; ...)`。javap 证实 BakedQuad.VERTEX_COUNT = 4（常量池 `public static final int VERTEX_COUNT = 4`）。
+     证据: src/main/java/com/namelessgod2008/features/items/AcceleratedQuadsRenderer.java:110-131（addVertex 循环）；D:/Programs/MC/26.1/_analysis/mc javap -constants net.minecraft.client.resources.model.geometry.BakedQuad → `VERTEX_COUNT = 4`
+  [proven] 日志实测确认物品 mesh 恰好 4 顶点（count-weighted）。mace 帧 mdWg=203412、mdInst=6447276 → 203412×128/6447276 = 4.038；且 mdMeshVerts/quadMiss = 17688/4422 = 4.000 精确。
+     证据: run/logs/latest.log 18:26:41 行 `muDispatch=5092 ... mdInst=6447276 mdMeshVerts=17688 mdWg=203412 ... quadMiss=4422`；公式 mdWg=(count*size+127)/128，dispatcher 用 GROUP_SIZE=128（MeshUploadingProgramDispatcher.java:29,402-406）
+  [proven] 实体加速的 mesh 粒度 ≈ 24 顶点/实例（一个 ModelPart/Cube 组），与物品实例数相差约 6 倍（不是 100 倍）。实体历史日志同样反推 meshSize：mdWg×128/mdInst = 24.01（2026-09-14-6: 581280×128/3098304=24.01；2026-09-16-1: 339080×128/1807344=24.01，多帧一致）。
+     证据: src/main/java/com/namelessgod2008/features/modelparts/mixins/ModelPartMixin.java:118-140（遍历 cubes 的所有 polygon 顶点建一个 mesh）；run/logs/2026-09-14-6.log.gz `mdInst=3098304 mdMeshVerts=16128 mdWg=581280`；2026-09-16-1.log.gz `mdInst=1807344 mdMeshVerts=9408 mdWg=339080`
+  [proven] 每顶点摊到的 mesh 实例数：物品 0.163 inst/vert（6447276/39487644），实体 0.0277 inst/vert（3167712/114469092），比值 5.9×。即相同顶点量下，物品路径产生约 6 倍的 compute 上传实例。
+     证据: latest.log mace 帧 verts=39487644 mdInst=6447276；2026-09-16-3.log.gz 实体帧 verts=114469092 mdInst=3167712
+  [proven] 物品路径每帧的 mdInst 体量 ≈ 全部加速顶点数（6.44M 实例 vs 39.5M 顶点），而实体路径 mdInst 仅为顶点数的 2.7%。物品的 compute 上传是「每 quad 一次」，实体是「每 24 顶点一次」。
+     证据: 同上两帧对比；AccelStats.MD_INSTANCES += overrideCounts 每实例累加（MeshUploadingProgramDispatcher.java:409-411）
+  [proven] compute 上传的固定 CPU 开销是瓶颈，而非顶点量。mace 帧 `mdUp=41~44ms/s` ≈ `mdCpu=42~44ms/s`（占满），即 dense 循环几乎全部耗时在每实例的 uploader.upload() 纯内存写；同帧 mdDispatch=5092/s → 每 dispatch 摊 1266 个实例，dispatch 本身已被均摊。折算每实例约 6.4~6.8ns。
+     证据: latest.log 18:26:27/18:26:41 行 `mdCpu=42 mdSubmit=5 ... mdUp=41ms/s denseWall=49` 与 `mdCpu=44 ... mdUp=44ms/s`；AccelStats.MD_RESERVE_NANOS/MD_UPLOAD_NANOS 分段（MeshUploadingProgramDispatcher.java:214-227）
+  [proven] addServerMesh 本身很轻（按 meshId 查/复用池化 MeshUploader，仅 append 一次 addUpload + elementSegment.count + meshVertexCount 累加），真正成本在 dispatch 的 dense 循环：每实例写 ~7 个 meshInfo int + 每顶点 1 个 varyingOffset int（4 顶点=4）+ 顶点色/uv/light 写入 ≈ 40+ 次 int 写。
+     证据: core/buffers/accelerated/builders/AcceleratedBufferBuilder.java:412-440（addServerMesh）；core/buffers/accelerated/pools/meshes/MeshUploaderPool.java:98-110（upload() 7 次 putIntAt×meshCount）；MeshUploadingProgramDispatcher.java:288-307（每顶点 varyingOffset 写）、315-322（色/uv/light 写）
+  [likely] 同一个 mesh 实例无论含 4 还是 24 顶点，每实例的固定上传成本相同；因此 4 顶点 mesh 用 6 倍实例换来 1/6 几何，省下的顶点变换不足以抵消多出的实例开销。这与「物品零收益」观测一致。
+     证据: 结构证据：MeshUploaderPool.MeshUploader.upload 的循环按 meshCount（实例数）而非顶点数线性增长；mdCpu/mdInst 在物品 6.8ns、实体 ~7.6ns 量级相同（item mdCpu=44/6447276；entity mdCpu=30/3167712）
+  [proven] 26.1 物品加速只注册了「逐 quad」渲染器，整模型烘焙路径未接线。acceleratedrendering.feature.items.mixins.json 的 client 列表仅有 ItemFeatureRendererMixin；SimpleBakedModelMixin / ItemRendererMixin / BakedQuadMixin / MultipartBakedModelMixin / WeightedBakedModelMixin / ModelBlockRendererMixin 均未出现在任何 mixin json 中（仅 .java 残留）。
+     证据: src/main/resources/acceleratedrendering.feature.items.mixins.json（client 仅 ItemFeatureRendererMixin）；grep 全 resources/ 无 SimpleBakedModel/BakedQuadMixin 注册；对比 1.21.4 同文件注册了全部 12 个
+  [proven] 1.21.4 原本有「整模型一个 mesh」的快路径：ItemRendererMixin → SimpleBakedModel.renderItemFast → render() 把该模型所有面按 tint layer 聚合成 1~N 个 mesh（每 layer 一个 mesh，含整模型全部顶点），并带 layer 参数。26.1 的逐-quad 路径没有这个聚合。
+     证据: D:/Programs/MC/1.21.4/.../features/items/mixins/ItemRendererMixin.java:72-81（tintLayers 为空时走 renderItemFast）；1.21.4 SimpleBakedModelMixin.java:104-224（按 layer 聚合 meshCollectors 后 build 每层一个 mesh，getTintIndex 作 meshLayer）
+  [proven] 1.21.4 的「小模型不加速」判据是 per-model 布尔覆盖（isAcceleratedInHand/isAcceleratedInGui，BakedModel 默认 false），不是按顶点数阈值。SimpleBakedModel 在 level 中 isAccelerated()=true、手/GUI 中为 false；未搜到任何 `quads.size()>N` 的数值阈值。
+     证据: 1.21.4 BakedModelMixin.java:46-58（三个 override 默认 false）；1.21.4 SimpleBakedModelMixin.java:233-243（isAccelerated=true, isAcceleratedInHand/Gui=false）；1.21.4 ItemRendererMixin.java:51 前置 `!CoreFeature.isRenderingLevel()` 守卫
+  [proven] 配置项 acceleratedItemRenderingMeshType(`accelerated_item_rendering.mesh_type`) 在 26.1 是死配置。AcceleratedQuadsRenderer 与 BakedQuadMixin/SimpleBakedModelMixin 建 mesh 时一律调用 AcceleratedEntityRenderingFeature.getMeshType()（实体配置），从不调用 AcceleratedItemRenderingFeature.getMeshType()。
+     证据: AcceleratedQuadsRenderer.java:133-135（AcceleratedEntityRenderingFeature.getMeshType()）；AcceleratedItemRenderingFeature.java:46-48 的 getMeshType() 无任何调用点（grep 全工程仅定义处）
+  [likely] 26.1 实体默认用 SERVER mesh 传输方式（coreSparseThreshold 默认 64；ServerMesh.isDense = forceDense || count >= 64）。每 quad 一个的 unique 物品 mesh 永远达不到 64 次复用，回退 sparse 路径；但日志显示实际走 dense（mdInst/mdSubmit 有值），说明同一 mesh 大量复用。
+     证据: configs/FeatureConfig.java:122-126（默认 64）；ServerMesh.java:43；Mixin 用 SERVER 默认（FeatureConfig.java:308/347 mesh_type=SERVER）；AccelStats mdInst/mdMeshVerts 在 dense 段累加
+  [proven] 帧率 A/B 无法从现有日志干净分离：开关物品加速的时间段里 mace 掉落物在/不在视野内混杂（OFF 帧 verts 仅 0.5~0.8M，ON 帧 20~30M），中位数 ON=49/S 但含「物体已掉出视野」的混淆，不能用于定量归因。用户实测「零收益」应作为主观测量采信，本任务结论基于结构证据。
+     证据: latest.log 时序扫描：18:24:53~18:25:20 OFF 段 verts=0.36M~0.82M，18:25:21 起 ON 段 verts 涨到 9.9M→28M；模式在 ON/OFF/MIX 间反复切换
+  ◆ 按顶点门限回退 vanilla（恢复 1.21.4 的「too small」语义） (工作量 小)
+    做法: 在 ItemFeatureRendererMixin 取到 quads 后，累加总顶点数（quads.size()*BakedQuad.VERTEX_COUNT），低于阈值（例如单 submit < 8~16 顶点）时不接管，直接 return 交还原版 putBakedQuad。26.1 只需在既有入口加一个 early-return 分支，不新增 mixin。
+    可行性: 高。改动局限在 ItemFeatureRendererMixin 一个文件、几行；阈值可先用 1.21.4 的语义等价物（小模型不加速）
+    风险: 低。最坏情况是退回现状（等于关闭物品加速）；不会破坏渲染正确性，因为未接管的 submit 走原版路径
+  ◆ 合并同一 ItemSubmit 的所有 quad 为一个 per-model mesh (工作量 中)
+    做法: 把 AcceleratedQuadsRenderer.render 的内层「每 quad 一个 mesh」改为「每个（extension, RenderType）一个 mesh」：在一个 meshCollector 里连续 addVertex 该 submit 的全部 quad，flush 一次，build 一个含 N×4 顶点的 mesh 并缓存（键为 quad 列表签名/模型身份）。这样 1 个物品 = 1 个 mesh 实例，实例数降到 1/230（本场景）。
+    可行性: 中。AcceleratedQuadsRenderer.render 已在同一 extension/transform 下拿到整个 quad 列表，改动范围可控；难点是缓存键——需用整个 quad 列表的几何做键（可复用 MeshData 的 merges 去重），而非单个 BakedQuad 实例
+    风险: 中。合并后 tint 逐层不同（tintIndex 不同）需拆 mesh，退回 1.21.4 的按 tint layer 聚合逻辑；缓存键变大可能带来 map 开销。理论上正确性可控
+  ◆ 移植 1.21.4 的整模型烘焙路径（SimpleBakedModelMixin 接线） (工作量 大)
+    做法: 把 26.1 已存在但未注册的 SimpleBakedModelMixin / ItemRendererMixin / MultipartBakedModelMixin / WeightedBakedModelMixin 加入 acceleratedrendering.feature.items.mixins.json，并在 26.1 的提交渲染链路（ItemSubmit 是否携带 bakedModel 引用）里补上 renderItemFast 入口。
+    可行性: 低-中。26.1 的 ItemFeatureRenderer.renderItem 只拿到 SubmitNodeStorage.ItemSubmit（含 pose/quads/tintLayers，不一定含 bakedModel 身份），整模型入口需要额外在提交段（ItemStackRenderState.submit）注入，工作量远大于前两个方案
+    风险: 高。26.1 物品渲染已重构为「提交-渲染两段式」，1.21.4 的注入点(ItemRenderer.renderItem)不存在；盲接可能破坏其它 RenderType 分组逻辑
+  ◆ 物品 mesh 改走 CLIENT 直传（addClientMesh memCopy） (工作量 小)
+    做法: 把 AcceleratedQuadsRenderer 建 mesh 时从 AcceleratedEntityRenderingFeature.getMeshType() 换成 AcceleratedItemRenderingFeature.getMeshType() 配置，并设成 CLIENT；ClientMesh.write → addClientMesh 直接把网格字节 memCopy 进顶点缓冲，跳过 compute 上传的实例循环。
+    可行性: 中。需修死配置 bug（AcceleratedQuadsRenderer.java:133-135），实测 CLIENT 对每-quad mesh 是否更快未知
+    风险: 中-高。addClientMesh 每实例做一次 vertexSize×4 字节 memCopy + varyingSize×4 写（AcceleratedBufferBuilder.java:373-409），对 4 顶点 mesh 可能反而更慢；且 CLIENT 只对 dynamic/走 vertexBuffer 的 RenderType 生效，可能大面积不可加速
+
